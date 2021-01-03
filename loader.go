@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -20,15 +21,26 @@ var (
 	ErrNoNextVersion = errors.New("no next version found")
 )
 
+// MigrationRecord struct.
+type MigrationRecord struct {
+	VersionID int64
+	Time      time.Time
+	IsApplied bool // was this a result of up() or down()
+}
+
 type Migration struct {
-	Version    int64
-	Next       *Migration
-	Previous   *Migration
+	Version  int64
+	Next     *Migration
+	Previous *Migration
 
 	Source     string // path to .sql script
 	Registered bool
 	UpFn       func(*sql.Tx) error // Up go migration function
 	DownFn     func(*sql.Tx) error // Down go migration function
+}
+
+func (m *Migration) String() string {
+	return fmt.Sprintf(m.Source)
 }
 
 type MigrationSlice []*Migration
@@ -127,6 +139,18 @@ func FileNumericComponent(name string) (int64, error) {
 	return n, e
 }
 
+func filterMigrationVersions(v, current, target int64) bool {
+	if target > current {
+		return v > current && v <= target
+	}
+
+	if target < current {
+		return v <= current && v > target
+	}
+
+	return false
+}
+
 type MigrationLoader interface{}
 
 type GoMigrationLoader struct{}
@@ -193,6 +217,26 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 	}
 
 	return sortAndConnectMigrations(migrations), nil
+}
+
+func (loader *SqlMigrationLoader) read(m *Migration) error {
+	f, err := os.Open(m.Source)
+	if err != nil {
+		return errors.Wrapf(err, "ERROR %v: failed to open SQL migration file", filepath.Base(m.Source))
+	}
+
+	defer f.Close()
+
+	var parser MigrationParser
+
+	statements, useTx, err := parser.Parse(f)
+	if err != nil {
+		return errors.Wrapf(err, "ERROR %v: failed to parse SQL migration file", filepath.Base(m.Source))
+	}
+	_ = statements
+	_ = useTx
+
+	return nil
 }
 
 func sortAndConnectMigrations(migrations MigrationSlice) MigrationSlice {
