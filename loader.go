@@ -8,6 +8,7 @@ import (
 type DB struct {
 	*sql.DB
 
+	driverName string
 	dialect SQLDialect
 }
 
@@ -36,6 +37,7 @@ func Open(driverName string, dbstring string, dialect SQLDialect) (*DB, error) {
 
 	return &DB{
 		dialect: dialect,
+		driverName: driverName,
 		DB: db,
 	}, nil
 }
