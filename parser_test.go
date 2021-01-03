@@ -20,6 +20,10 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 			name:  "up and down",
 			input: "testdata/migrations/20200721225616_trades.sql",
 		},
+		{
+			name:  "statement begin and end",
+			input: "testdata/migrations/20200819054742_trade_index.sql",
+		},
 	}
 
 	type Fixture struct {

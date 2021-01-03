@@ -82,12 +82,13 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, er
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(scanBuf, scanBufSize)
 
-	var state parserState = start
+	var state = start
 	var useTx = true
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
+		var isEnd = false
 		if strings.HasPrefix(line, "--") {
 			cmd := strings.TrimSpace(strings.TrimPrefix(line, "--"))
 
@@ -137,6 +138,8 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, er
 					return
 				}
 
+				isEnd = true
+
 			case "!txn":
 				useTx = false
 				continue
@@ -153,22 +156,11 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, er
 		}
 
 		// Write SQL line to a buffer.
-		if _, err = buf.WriteString(line + "\n"); err != nil {
-			err = errors.Wrap(err, "failed to write to buf")
-			return
-		}
-
-		// Read SQL body one by line, if we're in the right direction.
-		//
-		// 1) basic query with semicolon; 2) psql statement
-		//
-		// Export statement once we hit end of statement.
-		switch state {
-		case stateUp, stateUpStatementBegin, stateUpStatementEnd:
-		case stateDown, stateDownStatementBegin, stateDownStatementEnd:
-		default:
-			err = errors.Errorf("failed to parse migration: unexpected state %q on line %q, see https://github.com/c9s/goose#sql-migrations", state, line)
-			return
+		if !isEnd {
+			if _, err = buf.WriteString(line + "\n"); err != nil {
+				err = errors.Wrap(err, "failed to write to buf")
+				return
+			}
 		}
 
 		switch state {
