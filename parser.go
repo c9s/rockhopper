@@ -48,7 +48,6 @@ const (
 
 type Statement struct {
 	Direction Direction `json:"direction" yaml:"direction"`
-	UseTx     bool      `json:"useTxn" yaml:"useTxn"`
 	SQL       string    `json:"sql" yaml:"sql"`
 }
 
@@ -168,7 +167,6 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 			if p.endsWithSemicolon(line) {
 				upStmts = append(upStmts, Statement{
 					Direction: DirectionUp,
-					UseTx:     useTx,
 					SQL:       buf.String(),
 				})
 				buf.Reset()
@@ -178,7 +176,6 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 			if p.endsWithSemicolon(line) {
 				downStmts = append(downStmts, Statement{
 					Direction: DirectionDown,
-					UseTx:     useTx,
 					SQL:       buf.String(),
 				})
 				buf.Reset()
@@ -187,7 +184,6 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 		case stateUpStatementEnd:
 			upStmts = append(upStmts, Statement{
 				Direction: DirectionUp,
-				UseTx:     useTx,
 				SQL:       buf.String(),
 			})
 			buf.Reset()
@@ -196,7 +192,6 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 		case stateDownStatementEnd:
 			downStmts = append(downStmts, Statement{
 				Direction: DirectionDown,
-				UseTx:     useTx,
 				SQL:       buf.String(),
 			})
 			buf.Reset()

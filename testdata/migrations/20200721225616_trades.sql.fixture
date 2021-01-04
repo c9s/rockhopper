@@ -1,6 +1,5 @@
 upStmts:
     - direction: 1
-      useTxn: true
       sql: |
         CREATE TABLE `trades` (
           `gid` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -21,6 +20,5 @@ upStmts:
         ) ENGINE=InnoDB;
 downStmts:
     - direction: -1
-      useTxn: true
       sql: |
         DROP TABLE `trades`;
