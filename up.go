@@ -28,8 +28,6 @@ func Run() error {
 		return err
 	}
 
-	_ = currentVersion
-
 	var loader = &SqlMigrationLoader{}
 	migrations, err := loader.Load(migrationDir)
 	if err != nil {

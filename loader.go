@@ -29,47 +29,6 @@ type MigrationRecord struct {
 	IsApplied bool // was this a result of up() or down()
 }
 
-type Migration struct {
-	Version  int64
-	Next     *Migration
-	Previous *Migration
-
-	Source     string // path to .sql script
-	Registered bool
-	UpFn       TransactionHandler // Up go migration function
-	DownFn     TransactionHandler // Down go migration function
-
-	UpStatements   []Statement
-	DownStatements []Statement
-}
-
-func (m *Migration) String() string {
-	return fmt.Sprintf(m.Source)
-}
-
-type MigrationSlice []*Migration
-
-// helpers so we can use pkg sort
-func (ms MigrationSlice) Len() int      { return len(ms) }
-func (ms MigrationSlice) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
-func (ms MigrationSlice) Less(i, j int) bool {
-	if ms[i].Version == ms[j].Version {
-		panic(fmt.Sprintf("goose: duplicate version %v detected:\n%v\n%v", ms[i].Version, ms[i].Source, ms[j].Source))
-	}
-	return ms[i].Version < ms[j].Version
-}
-
-// Find finds the migration by version
-func (ms MigrationSlice) Find(version int64) (*Migration, error) {
-	for i, migration := range ms {
-		if migration.Version == version {
-			return ms[i], nil
-		}
-	}
-
-	return nil, ErrNoCurrentVersion
-}
-
 type TransactionHandler func(tx *sql.Tx) error
 
 var registeredGoMigrations map[int64]*Migration
@@ -135,7 +94,7 @@ func (loader *GoMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		return nil, fmt.Errorf("%s directory does not exists", dir)
 	}
 
-	var migrations MigrationSlice
+	var migrations = MigrationSlice{}
 
 	// Go migration files
 	goMigrationFiles, err := filepath.Glob(dir + "/**.go")
@@ -157,7 +116,7 @@ func (loader *GoMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
-	return connectMigrations(migrations), nil
+	return migrations.Connect(), nil
 }
 
 type SqlMigrationLoader struct {
@@ -171,7 +130,7 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		return nil, fmt.Errorf("%s directory does not exists", dir)
 	}
 
-	var migrations MigrationSlice
+	var migrations = MigrationSlice{}
 
 	// SQL migration files.
 	files, err := filepath.Glob(dir + "/**.sql")
@@ -200,7 +159,7 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 	}
 
 	sort.Sort(migrations)
-	return connectMigrations(migrations), nil
+	return migrations.Connect(), nil
 }
 
 func (loader *SqlMigrationLoader) readSource(m *Migration) error {
@@ -219,21 +178,4 @@ func (loader *SqlMigrationLoader) readSource(m *Migration) error {
 	m.UpStatements = upStmts
 	m.DownStatements = downStmts
 	return nil
-}
-
-func connectMigrations(migrations MigrationSlice) MigrationSlice {
-
-	// now that we're sorted in the appropriate direction,
-	// populate next and previous for each migration
-	for i, m := range migrations {
-		var prev *Migration = nil
-		if i > 0 {
-			prev = migrations[i-1]
-			migrations[i-1].Next = m
-		}
-
-		migrations[i].Previous = prev
-	}
-
-	return migrations
 }
