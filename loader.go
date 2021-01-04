@@ -17,6 +17,7 @@ import (
 var (
 	// ErrNoCurrentVersion when a current migration version is not found.
 	ErrNoCurrentVersion = errors.New("no current version found")
+
 	// ErrNoNextVersion when the next migration version is not found.
 	ErrNoNextVersion = errors.New("no next version found")
 )
@@ -35,8 +36,8 @@ type Migration struct {
 
 	Source     string // path to .sql script
 	Registered bool
-	UpFn       func(*sql.Tx) error // Up go migration function
-	DownFn     func(*sql.Tx) error // Down go migration function
+	UpFn       TransactionHandler // Up go migration function
+	DownFn     TransactionHandler // Down go migration function
 
 	UpStatements   []Statement
 	DownStatements []Statement
@@ -69,16 +70,18 @@ func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 	return nil, ErrNoCurrentVersion
 }
 
+type TransactionHandler func(tx *sql.Tx) error
+
 var registeredGoMigrations map[int64]*Migration
 
 // AddMigration adds a migration.
-func AddMigration(up func(*sql.Tx) error, down func(*sql.Tx) error) {
+func AddMigration(up, down TransactionHandler) {
 	_, filename, _, _ := runtime.Caller(1)
 	AddNamedMigration(filename, up, down)
 }
 
 // AddNamedMigration : Add a named migration.
-func AddNamedMigration(filename string, up func(*sql.Tx) error, down func(*sql.Tx) error) {
+func AddNamedMigration(filename string, up, down TransactionHandler) {
 	v, _ := FileNumericComponent(filename)
 
 	migration := &Migration{Version: v, Registered: true, UpFn: up, DownFn: down, Source: filename}
@@ -154,7 +157,7 @@ func (loader *GoMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
-	return sortAndConnectMigrations(migrations), nil
+	return connectMigrations(migrations), nil
 }
 
 type SqlMigrationLoader struct {
@@ -182,7 +185,13 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 			return nil, err
 		}
 
-		migrations = append(migrations, &Migration{Version: v, Source: file})
+		migration := &Migration{Version: v, Source: file}
+
+		if err := loader.readSource(migration); err != nil {
+			return nil, err
+		}
+
+		migrations = append(migrations, migration)
 	}
 
 	// Go migrations registered via goose.AddMigration().
@@ -190,10 +199,11 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
-	return sortAndConnectMigrations(migrations), nil
+	sort.Sort(migrations)
+	return connectMigrations(migrations), nil
 }
 
-func (loader *SqlMigrationLoader) read(m *Migration) error {
+func (loader *SqlMigrationLoader) readSource(m *Migration) error {
 	f, err := os.Open(m.Source)
 	if err != nil {
 		return errors.Wrapf(err, "ERROR %v: failed to open SQL migration file", filepath.Base(m.Source))
@@ -211,8 +221,7 @@ func (loader *SqlMigrationLoader) read(m *Migration) error {
 	return nil
 }
 
-func sortAndConnectMigrations(migrations MigrationSlice) MigrationSlice {
-	sort.Sort(migrations)
+func connectMigrations(migrations MigrationSlice) MigrationSlice {
 
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration

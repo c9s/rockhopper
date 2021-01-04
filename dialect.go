@@ -82,8 +82,8 @@ func LoadDialect(d string) (SQLDialect, error) {
 // PostgresDialect struct.
 type PostgresDialect struct{}
 
-func (pg PostgresDialect) createVersionTableSQL() string {
-	return fmt.Sprintf(`CREATE TABLE %s (
+func (d PostgresDialect) createVersionTableSQL() string {
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
             	id serial NOT NULL,
                 version_id bigint NOT NULL,
                 is_applied boolean NOT NULL,
@@ -92,11 +92,11 @@ func (pg PostgresDialect) createVersionTableSQL() string {
             );`, TableName())
 }
 
-func (pg PostgresDialect) insertVersionSQL() string {
+func (d PostgresDialect) insertVersionSQL() string {
 	return fmt.Sprintf("INSERT INTO %s (version_id, is_applied) VALUES ($1, $2);", TableName())
 }
 
-func (pg PostgresDialect) dbVersionQuery(db *sql.DB) (*sql.Rows, error) {
+func (d PostgresDialect) dbVersionQuery(db *sql.DB) (*sql.Rows, error) {
 	rows, err := db.Query(fmt.Sprintf("SELECT version_id, is_applied from %s ORDER BY id DESC", TableName()))
 	if err != nil {
 		return nil, err
@@ -105,11 +105,11 @@ func (pg PostgresDialect) dbVersionQuery(db *sql.DB) (*sql.Rows, error) {
 	return rows, err
 }
 
-func (m PostgresDialect) migrationSQL() string {
+func (d PostgresDialect) migrationSQL() string {
 	return fmt.Sprintf("SELECT tstamp, is_applied FROM %s WHERE version_id=$1 ORDER BY tstamp DESC LIMIT 1", TableName())
 }
 
-func (pg PostgresDialect) deleteVersionSQL() string {
+func (d PostgresDialect) deleteVersionSQL() string {
 	return fmt.Sprintf("DELETE FROM %s WHERE version_id=$1;", TableName())
 }
 
@@ -121,7 +121,7 @@ func (pg PostgresDialect) deleteVersionSQL() string {
 type MySQLDialect struct{}
 
 func (m MySQLDialect) createVersionTableSQL() string {
-	return fmt.Sprintf(`CREATE TABLE %s (
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
                 id serial NOT NULL,
                 version_id bigint NOT NULL,
                 is_applied boolean NOT NULL,
@@ -135,7 +135,7 @@ func (m MySQLDialect) insertVersionSQL() string {
 }
 
 func (m MySQLDialect) dbVersionQuery(db *sql.DB) (*sql.Rows, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT version_id, is_applied from %s ORDER BY id DESC", TableName()))
+	rows, err := db.Query(fmt.Sprintf("SELECT version_id, is_applied FROM %s ORDER BY id DESC", TableName()))
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func (m SqlServerDialect) deleteVersionSQL() string {
 type Sqlite3Dialect struct{}
 
 func (m Sqlite3Dialect) createVersionTableSQL() string {
-	return fmt.Sprintf(`CREATE TABLE %s (
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 version_id INTEGER NOT NULL,
                 is_applied INTEGER NOT NULL,
