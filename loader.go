@@ -37,6 +37,9 @@ type Migration struct {
 	Registered bool
 	UpFn       func(*sql.Tx) error // Up go migration function
 	DownFn     func(*sql.Tx) error // Down go migration function
+
+	UpStatements   []Statement
+	DownStatements []Statement
 }
 
 func (m *Migration) String() string {
@@ -55,46 +58,15 @@ func (ms MigrationSlice) Less(i, j int) bool {
 	return ms[i].Version < ms[j].Version
 }
 
-// Current gets the current migration.
-func (ms MigrationSlice) Current(current int64) (*Migration, error) {
+// Find finds the migration by version
+func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 	for i, migration := range ms {
-		if migration.Version == current {
+		if migration.Version == version {
 			return ms[i], nil
 		}
 	}
 
 	return nil, ErrNoCurrentVersion
-}
-
-// Next gets the next migration.
-func (ms MigrationSlice) Next(current int64) (*Migration, error) {
-	for i, migration := range ms {
-		if migration.Version > current {
-			return ms[i], nil
-		}
-	}
-
-	return nil, ErrNoNextVersion
-}
-
-// Previous : Get the previous migration.
-func (ms MigrationSlice) Previous(current int64) (*Migration, error) {
-	for i := len(ms) - 1; i >= 0; i-- {
-		if ms[i].Version < current {
-			return ms[i], nil
-		}
-	}
-
-	return nil, ErrNoNextVersion
-}
-
-// Last gets the last migration.
-func (ms MigrationSlice) Last() (*Migration, error) {
-	if len(ms) == 0 {
-		return nil, ErrNoNextVersion
-	}
-
-	return ms[len(ms)-1], nil
 }
 
 var registeredGoMigrations map[int64]*Migration
@@ -185,7 +157,9 @@ func (loader *GoMigrationLoader) Load(dir string) (MigrationSlice, error) {
 	return sortAndConnectMigrations(migrations), nil
 }
 
-type SqlMigrationLoader struct{}
+type SqlMigrationLoader struct {
+	parser MigrationParser
+}
 
 // CollectMigrations returns all the valid looking migration scripts in the
 // migrations folder and go func registry, and key them by version.
@@ -227,15 +201,13 @@ func (loader *SqlMigrationLoader) read(m *Migration) error {
 
 	defer f.Close()
 
-	var parser MigrationParser
-
-	statements, useTx, err := parser.Parse(f)
+	upStmts, downStmts, err := loader.parser.Parse(f)
 	if err != nil {
 		return errors.Wrapf(err, "ERROR %v: failed to parse SQL migration file", filepath.Base(m.Source))
 	}
-	_ = statements
-	_ = useTx
 
+	m.UpStatements = upStmts
+	m.DownStatements = downStmts
 	return nil
 }
 
