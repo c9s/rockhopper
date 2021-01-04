@@ -37,7 +37,7 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 			assert.NoError(t, err)
 
 			p := &MigrationParser{}
-			gotUpStmts, gotDownStmts, err := p.ParseBytes(data)
+			gotUpStmts, gotDownStmts, _, err := p.ParseBytes(data)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseBytes() error = %v, wantErr %v", err, tt.wantErr)
 				return

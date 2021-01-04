@@ -1,13 +1,24 @@
 package rockhopper
 
-import "fmt"
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"regexp"
+	"sort"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+)
 
 type Migration struct {
-	Version  int64
+	Version int64
+	UseTx   bool
+	Source  string // path to .sql script
+
 	Next     *Migration
 	Previous *Migration
 
-	Source     string // path to .sql script
 	Registered bool
 	UpFn       TransactionHandler // Up go migration function
 	DownFn     TransactionHandler // Down go migration function
@@ -18,6 +29,97 @@ type Migration struct {
 
 func (m *Migration) String() string {
 	return fmt.Sprintf(m.Source)
+}
+
+// Up runs an up migration.
+func (m *Migration) Up(ctx context.Context, db *DB) error {
+	return m.run(ctx, db, DirectionUp)
+}
+
+// Down runs a down migration.
+func (m *Migration) Down(ctx context.Context, db *DB) error {
+	return m.run(ctx, db, DirectionDown)
+}
+
+func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error {
+	var err error
+	var tx *sql.Tx = nil
+	var rollback = func() {}
+	var executor SQLExecutor = db
+
+	if m.UseTx {
+		log.Info("migration transaction is enabled, starting transaction...")
+
+		tx, err = db.BeginTx(ctx, nil)
+		if err != nil {
+			return errors.Wrap(err, "failed to begin transaction")
+		}
+
+		executor = tx
+		rollback = func() {
+			log.Info("rolling back transaction")
+			if err := tx.Rollback(); err != nil {
+				log.WithError(err).Error("rollback error")
+			}
+		}
+	} else {
+		log.Infof("transaction is disabled in migration version: %d", m.Version)
+	}
+
+	switch direction {
+
+	case DirectionUp:
+		if err := runStatements(ctx, executor, m.UpStatements); err != nil {
+			rollback()
+			return err
+		}
+
+		if err := db.insertVersion(ctx, executor, m.Version); err != nil {
+			rollback()
+			return errors.Wrap(err, "failed to insert new goose version")
+		}
+
+	case DirectionDown:
+		if err := runStatements(ctx, executor, m.DownStatements); err != nil {
+			rollback()
+			return err
+		}
+
+		if err := db.deleteVersion(ctx, executor, m.Version); err != nil {
+			rollback()
+			return errors.Wrap(err, "failed to delete version")
+		}
+	}
+
+	if m.UseTx && tx != nil {
+		log.Info("committing transaction...")
+		if err := tx.Commit(); err != nil {
+			return errors.Wrap(err, "failed to commit transaction")
+		}
+	}
+
+	return nil
+}
+
+var (
+	matchSQLComments = regexp.MustCompile(`(?m)^--.*$[\r\n]*`)
+	matchEmptyEOL    = regexp.MustCompile(`(?m)^$[\r\n]*`) // TODO: Duplicate
+)
+
+func cleanSQL(s string) string {
+	s = matchSQLComments.ReplaceAllString(s, ``)
+	return matchEmptyEOL.ReplaceAllString(s, ``)
+}
+
+func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {
+	for _, stmt := range stmts {
+		log.Infof("executing statement: %s", cleanSQL(stmt.SQL))
+		if _, err := e.ExecContext(ctx, stmt.SQL); err != nil {
+			return errors.Wrapf(err, "failed to execute SQL query %q", cleanSQL(stmt.SQL))
+		}
+	}
+
+	return nil
 }
 
 type MigrationSlice []*Migration
@@ -41,10 +143,12 @@ func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 		}
 	}
 
-	return nil, ErrNoCurrentVersion
+	return nil, ErrVersionNotFound
 }
 
-func (ms MigrationSlice) Connect() MigrationSlice {
+func (ms MigrationSlice) SortAndConnect() MigrationSlice {
+	sort.Sort(ms)
+
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
 	for i, m := range ms {

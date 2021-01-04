@@ -1,12 +1,17 @@
 package rockhopper
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
+
+type SQLExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+}
 
 type DB struct {
 	*sql.DB
@@ -43,6 +48,23 @@ func Open(driverName string, dsn string, dialect SQLDialect) (*DB, error) {
 		driverName: driverName,
 		DB:         db,
 	}, nil
+}
+
+
+func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) error {
+	if _, err := tx.ExecContext(ctx, db.dialect.deleteVersionSQL(), version); err != nil {
+		return errors.Wrap(err, "failed to delete migration record")
+	}
+
+	return nil
+}
+
+func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, version int64) error {
+	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(), version, true); err != nil {
+		return errors.Wrap(err, "failed to insert new migration record")
+	}
+
+	return nil
 }
 
 func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
@@ -84,7 +106,7 @@ func (db *DB) CurrentVersion() (int64, error) {
 		return 0, db.createVersionTable()
 	}
 
-	if err := rows.Close() ; err != nil {
+	if err := rows.Close(); err != nil {
 		return 0, err
 	}
 

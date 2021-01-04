@@ -56,17 +56,17 @@ type MigrationParser struct {
 	bufferPool *sync.Pool
 }
 
-func (p *MigrationParser) ParseBytes(data []byte) (upStmts, downStmts []Statement, err error) {
+func (p *MigrationParser) ParseBytes(data []byte) (upStmts, downStmts []Statement, useTx bool, err error) {
 	buf := bytes.NewBuffer(data)
 	return p.Parse(buf)
 }
 
-func (p *MigrationParser) ParseString(data string) (upStmts, downStmts []Statement, err error) {
+func (p *MigrationParser) ParseString(data string) (upStmts, downStmts []Statement, useTx bool, err error) {
 	buf := bytes.NewBufferString(data)
 	return p.Parse(buf)
 }
 
-func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, err error) {
+func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, useTx bool, err error) {
 	if p.bufferPool == nil {
 		p.bufferPool = &sync.Pool{
 			New: func() interface{} {
@@ -83,7 +83,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, er
 	scanner.Buffer(scanBuf, scanBufSize)
 
 	var state = start
-	var useTx = true
+	useTx = true
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -101,7 +101,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, er
 				case start:
 					state = stateUp
 				default:
-					return nil, nil, errors.Errorf("duplicate '-- +up' annotations; state=%v, see https://github.com/c9s/goose#sql-migrations", state)
+					return nil, nil, true, errors.Errorf("duplicate '-- +up' annotations; state=%v, see https://github.com/c9s/goose#sql-migrations", state)
 				}
 				continue
 

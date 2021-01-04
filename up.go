@@ -2,7 +2,6 @@ package rockhopper
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/spf13/viper"
 )
@@ -52,32 +51,33 @@ func Run() error {
 	return nil
 }
 
-
-
-// UpTo migrates up to a specific version.
-func UpTo(ctx context.Context, db *sql.DB, migrations MigrationSlice, version int64) error {
-	// migrations, err := CollectMigrations(dir, minVersion, version)
-	/*
-	for {
-		current, err := GetDBVersion(db)
-		if err != nil {
-			return err
-		}
-
-		next, err := migrations.Next
-		if err != nil {
-			if err == ErrNoNextVersion {
-				log.Printf("goose: no migrations to run. current version: %d\n", current)
-				return nil
-			}
-			return err
-		}
-
-		if err = next.Up(ctx, db); err != nil {
-			return err
-		}
+func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64) error {
+	if len(migrations) == 0 {
+		return nil
 	}
-	*/
+
+	m, err := migrations.Find(from)
+	if err == ErrVersionNotFound {
+		m = migrations[0]
+	} else if err != nil {
+		return err
+	}
+
+	for {
+		if to > 0 && m.Version > to {
+			break
+		}
+
+		if err := m.Up(ctx, db); err != nil {
+			return err
+		}
+
+		if m.Next == nil {
+			break
+		}
+
+		m = m.Next
+	}
+
 	return nil
 }
-

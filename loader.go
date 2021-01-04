@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +16,8 @@ import (
 var (
 	// ErrNoCurrentVersion when a current migration version is not found.
 	ErrNoCurrentVersion = errors.New("no current version found")
+
+	ErrVersionNotFound = errors.New("version not found")
 
 	// ErrNoNextVersion when the next migration version is not found.
 	ErrNoNextVersion = errors.New("no next version found")
@@ -116,7 +117,7 @@ func (loader *GoMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
-	return migrations.Connect(), nil
+	return migrations.SortAndConnect(), nil
 }
 
 type SqlMigrationLoader struct {
@@ -158,8 +159,7 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
-	sort.Sort(migrations)
-	return migrations.Connect(), nil
+	return migrations.SortAndConnect(), nil
 }
 
 func (loader *SqlMigrationLoader) readSource(m *Migration) error {
@@ -170,11 +170,12 @@ func (loader *SqlMigrationLoader) readSource(m *Migration) error {
 
 	defer f.Close()
 
-	upStmts, downStmts, err := loader.parser.Parse(f)
+	upStmts, downStmts, useTx, err := loader.parser.Parse(f)
 	if err != nil {
 		return errors.Wrapf(err, "ERROR %v: failed to parse SQL migration file", filepath.Base(m.Source))
 	}
 
+	m.UseTx = useTx
 	m.UpStatements = upStmts
 	m.DownStatements = downStmts
 	return nil
