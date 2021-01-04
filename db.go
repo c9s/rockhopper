@@ -18,6 +18,7 @@ type DB struct {
 
 	driverName string
 	dialect    SQLDialect
+	tableName  string
 }
 
 // Open creates a connection to a database
@@ -47,12 +48,12 @@ func Open(driverName string, dsn string, dialect SQLDialect) (*DB, error) {
 		dialect:    dialect,
 		driverName: driverName,
 		DB:         db,
+		tableName:  defaultTableName,
 	}, nil
 }
 
-
 func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.deleteVersionSQL(), version); err != nil {
+	if _, err := tx.ExecContext(ctx, db.dialect.deleteVersionSQL(db.tableName), version); err != nil {
 		return errors.Wrap(err, "failed to delete migration record")
 	}
 
@@ -60,7 +61,7 @@ func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) 
 }
 
 func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, version int64) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(), version, true); err != nil {
+	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), version, true); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
 	}
 
@@ -68,7 +69,7 @@ func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, version int64) 
 }
 
 func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
-	rows, err := db.dialect.dbVersionQuery(db.DB)
+	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +102,7 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 }
 
 func (db *DB) CurrentVersion() (int64, error) {
-	rows, err := db.dialect.dbVersionQuery(db.DB)
+	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
 	if err != nil {
 		return 0, db.createVersionTable()
 	}
@@ -153,7 +154,7 @@ func (db *DB) createVersionTable() error {
 		return err
 	}
 
-	if _, err := txn.Exec(db.dialect.createVersionTableSQL()); err != nil {
+	if _, err := txn.Exec(db.dialect.createVersionTableSQL(db.tableName)); err != nil {
 		if err := txn.Rollback(); err != nil {
 			log.WithError(err).Error("create version table, rollback error")
 		}
@@ -162,7 +163,7 @@ func (db *DB) createVersionTable() error {
 
 	version := 0
 	applied := true
-	if _, err := txn.Exec(db.dialect.insertVersionSQL(), version, applied); err != nil {
+	if _, err := txn.Exec(db.dialect.insertVersionSQL(db.tableName), version, applied); err != nil {
 		if err := txn.Rollback(); err != nil {
 			log.WithError(err).Error("insert version, rollback error")
 		}
