@@ -12,9 +12,10 @@ import (
 )
 
 type Migration struct {
+	Name    string
+	Source  string // path to .sql script
 	Version int64
 	UseTx   bool
-	Source  string // path to .sql script
 
 	Next     *Migration
 	Previous *Migration
@@ -90,6 +91,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 			return errors.Wrap(err, "failed to delete version")
 		}
 	}
+
 
 	if m.UseTx && tx != nil {
 		log.Info("committing transaction...")

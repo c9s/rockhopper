@@ -1,10 +1,12 @@
 package rockhopper
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,7 +23,21 @@ var (
 
 	// ErrNoNextVersion when the next migration version is not found.
 	ErrNoNextVersion = errors.New("no next version found")
+
+	SqlMigrationFilenamePattern = regexp.MustCompile("(\\d+)_(\\w+)\\.sql$")
+
+	snakeCase = regexp.MustCompile("_[a-z]+")
 )
+
+func replaceExt(s string, ext string) string {
+	return regexp.MustCompile("\\.\\w+$").ReplaceAllString(s, ext)
+}
+
+func toCamelCase(s string) string {
+	return snakeCase.ReplaceAllStringFunc(s, func(s string) string {
+		return strings.ToTitle(strings.TrimLeft(s, "_"))
+	})
+}
 
 // MigrationRecord struct.
 type MigrationRecord struct {
@@ -30,7 +46,7 @@ type MigrationRecord struct {
 	IsApplied bool // was this a result of up() or down()
 }
 
-type TransactionHandler func(tx *sql.Tx) error
+type TransactionHandler func(ctx context.Context, tx *sql.Tx) error
 
 var registeredGoMigrations map[int64]*Migration
 
@@ -145,7 +161,8 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 			return nil, err
 		}
 
-		migration := &Migration{Version: v, Source: file}
+		name := SqlMigrationFilenamePattern.ReplaceAllString(filepath.Base(file), "$2")
+		migration := &Migration{Version: v, Name: name, Source: file}
 
 		if err := loader.readSource(migration); err != nil {
 			return nil, err
