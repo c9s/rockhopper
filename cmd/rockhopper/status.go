@@ -25,9 +25,21 @@ var StatusCmd = &cobra.Command{
 	RunE:         status,
 }
 
-func status(cmd *cobra.Command, args []string) error {
+func checkConfig(config *rockhopper.Config) error {
 	if config == nil {
 		return fmt.Errorf("config is not loaded")
+	}
+
+	if len(config.Driver) == 0 {
+		return fmt.Errorf("driver name can not be empty")
+	}
+
+	return nil
+}
+
+func status(cmd *cobra.Command, args []string) error {
+	if err := checkConfig(config) ; err != nil {
+		return err
 	}
 
 	dialectName := config.Dialect
