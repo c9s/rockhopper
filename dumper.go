@@ -8,7 +8,7 @@ import (
 	"text/template"
 )
 
-var goMigrationTemplate = template.Must(template.New("rockhopper.go-migration").Funcs(template.FuncMap{
+var goMigrationTemplate = template.Must(template.New("cmd.go-migration").Funcs(template.FuncMap{
 	"quote": func(s string) string {
 		s = strings.ReplaceAll(s, "\n", "\\n")
 		s = strings.ReplaceAll(s, "\"", "\\\"")
@@ -20,11 +20,11 @@ import (
 	"database/sql"
 	"context"
 
-	"github.com/c9s/rockhopper"
+	"github.com/c9s/bbgo/pkg/cmd"
 )
 
 func init() {
-	rockhopper.AddMigration(up{{.CamelName}}, down{{.CamelName}})
+	cmd.AddMigration(up{{.CamelName}}, down{{.CamelName}})
 }
 
 func up{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
