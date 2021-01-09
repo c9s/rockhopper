@@ -1,12 +1,15 @@
 package main
 
 import (
+	"os"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/x-cray/logrus-prefixed-formatter"
+
+	"github.com/c9s/rockhopper"
 )
 
 var RootCmd = &cobra.Command{
@@ -27,7 +30,8 @@ func init() {
 	RootCmd.PersistentFlags().String("config", "rockhopper.yaml", "config file")
 }
 
-func Execute() {
+func main() {
+	viper.SetEnvPrefix("RH_")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
 	// Enable environment variable binding, the env vars are not overloaded yet.
@@ -43,6 +47,18 @@ func Execute() {
 	}
 
 	log.SetFormatter(&prefixed.TextFormatter{})
+
+	configFile := viper.GetString("config")
+	_, err := os.Stat(configFile)
+	if err != nil && os.IsNotExist(err) {
+		log.Fatalf("config file %s does not exist", configFile)
+	}
+
+	config, err := rockhopper.LoadConfig(configFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = config
 
 	if err := RootCmd.Execute(); err != nil {
 		log.WithError(err).Fatalf("cannot execute command")
