@@ -11,7 +11,7 @@ type Config struct {
 	Driver        string `json:"driver" yaml:"driver" env:"ROCKHOPPER_DRIVER"`
 	Dialect       string `json:"dialect" yaml:"dialect" env:"ROCKHOPPER_DIALECT"`
 	DSN           string `json:"dsn" yaml:"dsn" env:"ROCKHOPPER_DSN"`
-	MigrationsDir string `json:"migrationsDir" env:"ROCKHOPPER_MIGRATIONS_DIR"`
+	MigrationsDir string `json:"migrationsDir" yaml:"migrationsDir" env:"ROCKHOPPER_MIGRATIONS_DIR"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
