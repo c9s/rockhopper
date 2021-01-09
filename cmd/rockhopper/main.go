@@ -31,7 +31,7 @@ func init() {
 }
 
 func main() {
-	viper.SetEnvPrefix("RH_")
+	viper.SetEnvPrefix("ROCKHOPPER_")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
 	// Enable environment variable binding, the env vars are not overloaded yet.
