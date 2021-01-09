@@ -68,6 +68,24 @@ func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, version int64) 
 	return nil
 }
 
+func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
+	var row MigrationRecord
+
+	var q = db.dialect.migrationSQL(db.tableName)
+	var err = db.QueryRow(q, version).Scan(&row.Time, &row.IsApplied)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		} else {
+			return nil, errors.Wrap(err, "failed to query the latest migration")
+		}
+	}
+
+	return &row, nil
+
+}
+
 func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
 	if err != nil {

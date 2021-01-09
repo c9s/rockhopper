@@ -12,6 +12,8 @@ import (
 	"github.com/c9s/rockhopper"
 )
 
+var config *rockhopper.Config
+
 var RootCmd = &cobra.Command{
 	Use:   "rh",
 	Short: "rockhopper migration tool",
@@ -54,11 +56,11 @@ func main() {
 		log.Fatalf("config file %s does not exist", configFile)
 	}
 
-	config, err := rockhopper.LoadConfig(configFile)
+	// load config into the global instance
+	config, err = rockhopper.LoadConfig(configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	_ = config
 
 	if err := RootCmd.Execute(); err != nil {
 		log.WithError(err).Fatalf("cannot execute command")

@@ -5,15 +5,13 @@ import (
 
 	"github.com/codingconcepts/env"
 	"gopkg.in/yaml.v3"
-
-	"github.com/c9s/bbgo/pkg/datatype"
 )
 
 type Config struct {
-	Driver         string               `json:"driver" yaml:"driver" env:"ROCKHOPPER_DRIVER"`
-	Dialect        string               `json:"dialect" yaml:"dialect" env:"ROCKHOPPER_DIALECT"`
-	DSN            string               `json:"dsn" yaml:"dsn" env:"ROCKHOPPER_DSN"`
-	MigrationsDirs datatype.StringSlice `json:"migrationsDirs" env:"ROCKHOPPER_MIGRATIONS_DIR"`
+	Driver        string `json:"driver" yaml:"driver" env:"ROCKHOPPER_DRIVER"`
+	Dialect       string `json:"dialect" yaml:"dialect" env:"ROCKHOPPER_DIALECT"`
+	DSN           string `json:"dsn" yaml:"dsn" env:"ROCKHOPPER_DSN"`
+	MigrationsDir string `json:"migrationsDir" env:"ROCKHOPPER_MIGRATIONS_DIR"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
@@ -23,7 +21,7 @@ func LoadConfig(configFile string) (*Config, error) {
 	}
 
 	var config Config
-	if err := yaml.Unmarshal(data, config); err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, err
 	}
 
