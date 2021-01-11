@@ -21,6 +21,20 @@ type DB struct {
 	tableName  string
 }
 
+func OpenByConfig(config *Config) (*DB, error) {
+	dialectName := config.Dialect
+	if len(dialectName) == 0 {
+		dialectName = config.Driver
+	}
+
+	dialect, err := LoadDialect(dialectName)
+	if err != nil {
+		return nil, err
+	}
+
+	return Open(config.Driver, config.DSN, dialect)
+}
+
 // Open creates a connection to a database
 func Open(driverName string, dsn string, dialect SQLDialect) (*DB, error) {
 	switch driverName {

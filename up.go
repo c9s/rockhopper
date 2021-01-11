@@ -51,7 +51,38 @@ func Run() error {
 	return nil
 }
 
-func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64) error {
+func UpByStep(ctx context.Context, db *DB, migrations MigrationSlice, from int64, steps int, callbacks ...func(m *Migration)) error {
+	if len(migrations) == 0 {
+		return nil
+	}
+
+	m, err := migrations.Find(from)
+	if err == ErrVersionNotFound {
+		m = migrations[len(migrations)-1]
+	} else if err != nil {
+		return err
+	}
+
+	for ; steps >= 0; steps-- {
+		if err := m.Up(ctx, db); err != nil {
+			return err
+		}
+
+		for _, cb := range callbacks {
+			cb(m)
+		}
+
+		if m.Next == nil {
+			break
+		}
+
+		m = m.Next
+	}
+
+	return nil
+}
+
+func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64, callbacks ...func(m *Migration)) error {
 	if len(migrations) == 0 {
 		return nil
 	}
@@ -70,6 +101,10 @@ func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64) 
 
 		if err := m.Up(ctx, db); err != nil {
 			return err
+		}
+
+		for _, cb := range callbacks {
+			cb(m)
 		}
 
 		if m.Next == nil {

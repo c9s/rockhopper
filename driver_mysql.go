@@ -15,8 +15,9 @@ import (
 // the parameter `parseTime` set to true. This allows internal goose logic
 // to assume that DATETIME/DATE/TIMESTAMP can be scanned into the time.Time
 // type.
-func normalizeDBString(driver string, str string) string {
-	if driver == "mysql" {
+func normalizeDNS(driver string, str string) string {
+	switch driver {
+	case "mysql":
 		var err error
 		str, err = normalizeMySQLDSN(str)
 		if err != nil {

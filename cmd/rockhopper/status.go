@@ -38,21 +38,11 @@ func checkConfig(config *rockhopper.Config) error {
 }
 
 func status(cmd *cobra.Command, args []string) error {
-	if err := checkConfig(config) ; err != nil {
+	if err := checkConfig(config); err != nil {
 		return err
 	}
 
-	dialectName := config.Dialect
-	if len(dialectName) == 0 {
-		dialectName = config.Driver
-	}
-
-	dialect, err := rockhopper.LoadDialect(dialectName)
-	if err != nil {
-		return err
-	}
-
-	db, err := rockhopper.Open(config.Driver, config.DSN, dialect)
+	db, err := rockhopper.OpenByConfig(config)
 	if err != nil {
 		return err
 	}
