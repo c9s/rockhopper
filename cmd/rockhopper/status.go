@@ -48,6 +48,11 @@ func status(cmd *cobra.Command, args []string) error {
 
 	defer db.Close()
 
+	_, err = db.CurrentVersion()
+	if err != nil {
+		return err
+	}
+
 	loader := &rockhopper.SqlMigrationLoader{}
 	migrations, err := loader.Load(config.MigrationsDir)
 	if err != nil {
