@@ -10,8 +10,8 @@ import (
 )
 
 func init() {
-	UpCmd.Flags().String("to", "", "up to a specific version")
-	UpCmd.Flags().Int("step", 0, "run upgrade by steps")
+	UpCmd.Flags().Int64("to", 0, "up to a specific version")
+	UpCmd.Flags().Int("steps", 0, "run upgrade by steps")
 	RootCmd.AddCommand(UpCmd)
 }
 
@@ -26,6 +26,11 @@ var UpCmd = &cobra.Command{
 
 func up(cmd *cobra.Command, args []string) error {
 	if err := checkConfig(config); err != nil {
+		return err
+	}
+
+	steps, err := cmd.Flags().GetInt("steps")
+	if err != nil {
 		return err
 	}
 
@@ -55,7 +60,14 @@ func up(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if steps > 0 {
+		return rockhopper.UpBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
+			log.Infof("migration %v is applied", m.Version)
+		})
+	}
+
 	return rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
 		log.Infof("migration %v is applied", m.Version)
 	})
+
 }

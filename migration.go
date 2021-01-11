@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -109,8 +110,8 @@ var (
 )
 
 func cleanSQL(s string) string {
-	s = matchSQLComments.ReplaceAllString(s, ``)
-	return matchEmptyEOL.ReplaceAllString(s, ``)
+	s = matchSQLComments.ReplaceAllString(s, "")
+	return strings.TrimSpace(matchEmptyEOL.ReplaceAllString(s, ""))
 }
 
 func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {

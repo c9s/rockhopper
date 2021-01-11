@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	DownCmd.Flags().String("to", "", "downgrade to a specific version")
+	DownCmd.Flags().Int64("to", 0, "downgrade to a specific version")
 	DownCmd.Flags().Int("steps", 0, "downgrade by steps")
 	RootCmd.AddCommand(DownCmd)
 }
@@ -30,6 +30,11 @@ func down(cmd *cobra.Command, args []string) error {
 	}
 
 	to, err := cmd.Flags().GetInt64("to")
+	if err != nil {
+		return err
+	}
+
+	steps, err := cmd.Flags().GetInt("steps")
 	if err != nil {
 		return err
 	}
@@ -55,9 +60,16 @@ func down(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	return rockhopper.Down(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
+	if to > 0 {
+		return rockhopper.Down(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
+			log.Infof("migration %v is rolled back", m.Version)
+		})
+	}
+	if steps == 0 {
+		steps = 1
+	}
+
+	return rockhopper.DownBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
 		log.Infof("migration %v is rolled back", m.Version)
 	})
 }
-
-

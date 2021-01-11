@@ -2,7 +2,7 @@ package rockhopper
 
 import "context"
 
-func DownByStep(ctx context.Context, db *DB, migrations MigrationSlice, from int64, steps int, callbacks ...func(m *Migration)) error {
+func DownBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int64, steps int, callbacks ...func(m *Migration)) error {
 	if len(migrations) == 0 {
 		return nil
 	}
