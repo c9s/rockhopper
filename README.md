@@ -1,7 +1,7 @@
 rockhopper
 ======================
 
-rockhopper is an embedable migration tool written in Go, which can embed your migration files into a package with an easy-to-use API.
+rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an easy-to-use API.
 
 # Install 
 
