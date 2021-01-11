@@ -62,7 +62,7 @@ func down(cmd *cobra.Command, args []string) error {
 
 	if to > 0 {
 		return rockhopper.Down(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
-			log.Infof("migration %v is rolled back", m.Version)
+			log.Infof("migration %v is applied for downgrade", m.Version)
 		})
 	}
 	if steps == 0 {
@@ -70,6 +70,6 @@ func down(cmd *cobra.Command, args []string) error {
 	}
 
 	return rockhopper.DownBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
-		log.Infof("migration %v is rolled back", m.Version)
+		log.Infof("migration %v is applied for downgrade", m.Version)
 	})
 }
