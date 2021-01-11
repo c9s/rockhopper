@@ -65,7 +65,7 @@ func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int6
 		m = m.Next
 	}
 
-	for ; steps >= 0 && m != nil; steps-- {
+	for ; steps > 0 && m != nil; steps-- {
 		if err := m.Up(ctx, db); err != nil {
 			return err
 		}

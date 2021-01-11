@@ -14,7 +14,7 @@ func DownBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from in
 		return err
 	}
 
-	for ; steps >= 0; steps-- {
+	for ; steps > 0; steps-- {
 		if err := m.Down(ctx, db); err != nil {
 			return err
 		}

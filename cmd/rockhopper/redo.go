@@ -1,6 +1,12 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"context"
+
+	"github.com/spf13/cobra"
+
+	"github.com/c9s/rockhopper"
+)
 
 func init() {
 	RedoCmd.Flags().String("totp-key-url", "", "time-based one-time password key URL, if defined, it will be used for restoring the otp key")
@@ -17,6 +23,27 @@ var RedoCmd = &cobra.Command{
 }
 
 func redo(cmd *cobra.Command, args []string) error {
-	return nil
+	db, err := rockhopper.OpenByConfig(config)
+	if err != nil {
+		return err
+	}
+
+	defer db.Close()
+
+	loader := &rockhopper.SqlMigrationLoader{}
+	migrations, err := loader.Load(config.MigrationsDir)
+	if err != nil {
+		return err
+	}
+
+	currentVersion, err := db.CurrentVersion()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	return rockhopper.Redo(ctx, db, currentVersion, migrations)
 }
 

@@ -26,7 +26,7 @@ var (
 
 	SqlMigrationFilenamePattern = regexp.MustCompile("(\\d+)_(\\w+)\\.sql$")
 
-	snakeCase = regexp.MustCompile("_[a-z]+")
+	snakeCasePattern = regexp.MustCompile("_[a-z]+")
 )
 
 func replaceExt(s string, ext string) string {
@@ -34,7 +34,7 @@ func replaceExt(s string, ext string) string {
 }
 
 func toCamelCase(s string) string {
-	return snakeCase.ReplaceAllStringFunc(s, func(s string) string {
+	return snakeCasePattern.ReplaceAllStringFunc(s, func(s string) string {
 		return strings.ToTitle(strings.TrimLeft(s, "_"))
 	})
 }
