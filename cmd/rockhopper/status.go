@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -67,8 +66,6 @@ func status(cmd *cobra.Command, args []string) error {
 }
 
 func printMigrationStatus(db *rockhopper.DB, migration *rockhopper.Migration) error {
-	var script = filepath.Base(migration.Source)
-
 	row, err := db.FindMigration(migration.Version)
 	if err != nil {
 		return err
@@ -82,6 +79,6 @@ func printMigrationStatus(db *rockhopper.DB, migration *rockhopper.Migration) er
 		appliedAt = "Pending"
 	}
 
-	log.Printf("    %-24s -- %v\n", appliedAt, script)
+	log.Printf("    %-24s -- %v\n", appliedAt, migration.Source)
 	return nil
 }
