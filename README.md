@@ -1,9 +1,10 @@
 rockhopper
 ======================
 
-rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an easy-to-use API.
+rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an
+easy-to-use API.
 
-# Install 
+# Install
 
 ```
 go get github.com/c9s/rockhopper/cmd/rockhopper
@@ -57,8 +58,47 @@ To redo a migration:
 rockhopper redo
 ```
 
+You can compile your SQL migrations into a go package:
 
+```shell
+rockhopper compile -o pkg/migrations
+```
 
+# API
+
+```go
+// load config into the global instance
+config, err = rockhopper.LoadConfig(configFile)
+if err != nil {
+log.Fatal(err)
+}
+
+db, err := rockhopper.OpenByConfig(config)
+if err != nil {
+return err
+}
+
+defer db.Close()
+
+currentVersion, err = db.CurrentVersion()
+if err != nil {
+return err
+}
+
+loader := &rockhopper.SqlMigrationLoader{}
+migrations, err := loader.Load(config.MigrationsDir)
+if err != nil {
+return err
+}
+
+for _, m := range migrations {
+	// ....
+}
+
+err = rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
+    log.Infof("migration %v is applied", m.Version)
+})
+```
 
 # License
 
