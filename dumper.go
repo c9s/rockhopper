@@ -20,11 +20,11 @@ import (
 	"database/sql"
 	"context"
 
-	"github.com/c9s/bbgo/pkg/cmd"
+	"github.com/c9s/rockhopper"
 )
 
 func init() {
-	cmd.AddMigration(up{{.CamelName}}, down{{.CamelName}})
+	rockhopper.AddMigration(up{{.CamelName}}, down{{.CamelName}})
 }
 
 func up{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
@@ -51,7 +51,7 @@ func down{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
 `))
 
 type GoMigrationDumper struct {
-	Dir string
+	Dir         string
 	PackageName string
 }
 
@@ -61,15 +61,14 @@ func (d *GoMigrationDumper) Dump(m *Migration) error {
 		packageName = filepath.Base(d.Dir)
 	}
 
-
 	buf := bytes.NewBuffer(nil)
 	err := goMigrationTemplate.Execute(buf, struct {
-		CamelName string
-		Migration *Migration
+		CamelName   string
+		Migration   *Migration
 		PackageName string
 	}{
-		CamelName: strings.Title(toCamelCase(m.Name)),
-		Migration: m,
+		CamelName:   strings.Title(toCamelCase(m.Name)),
+		Migration:   m,
 		PackageName: packageName,
 	})
 	if err != nil {
