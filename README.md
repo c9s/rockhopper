@@ -32,6 +32,32 @@ To add new migration scripts:
 rockhopper create -t sql my_first_migration
 ```
 
+To check migration status:
+
+```sh
+rockhopper status
+```
+
+To upgrade:
+
+```shell
+rockhopper up
+```
+
+To downgrade:
+
+```shell
+rockhopper down
+```
+
+To redo a migration:
+
+```shell
+rockhopper redo
+```
+
+
+
 
 # License
 
