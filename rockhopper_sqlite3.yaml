@@ -1,0 +1,5 @@
+---
+driver: sqlite3
+dialect: sqlite3
+dsn: "rockhopper.sqlite"
+migrationsDir: migrations
