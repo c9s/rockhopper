@@ -1,0 +1,11 @@
+---
+language: go
+go:
+- 1.14
+- 1.15
+services:
+- mysql
+before_script:
+- go mod download
+script:
+- go test -v ./...
