@@ -64,6 +64,12 @@ You can compile your SQL migrations into a go package:
 rockhopper compile -o pkg/migrations
 ```
 
+You can change the default config file name by passing the `--config` parameter:
+
+```shell
+rockhooper --config rockhopper_sqlite3.yaml status
+```
+
 # API
 
 ```go
