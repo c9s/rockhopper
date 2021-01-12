@@ -1,6 +1,8 @@
 rockhopper
 ======================
 
+[![Build Status](https://travis-ci.org/c9s/rockhopper.svg?branch=main)](https://travis-ci.org/c9s/rockhopper)
+
 rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an
 easy-to-use API.
 
