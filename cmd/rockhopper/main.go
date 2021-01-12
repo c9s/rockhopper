@@ -34,7 +34,6 @@ var rootCmd = &cobra.Command{
 		config, err = rockhopper.LoadConfig(configFile)
 		if err != nil {
 			return err
-			log.Fatal(err)
 		}
 
 		return nil
