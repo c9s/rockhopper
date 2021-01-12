@@ -6,6 +6,13 @@ rockhopper
 rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an
 easy-to-use API.
 
+# Supported Drivers
+
+- mysql
+- sqlite3
+- mssql
+- postgresql
+
 # Install
 
 ```
