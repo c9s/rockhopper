@@ -10,7 +10,7 @@ import (
 
 func init() {
 	RedoCmd.Flags().String("totp-key-url", "", "time-based one-time password key URL, if defined, it will be used for restoring the otp key")
-	RootCmd.AddCommand(RedoCmd)
+	rootCmd.AddCommand(RedoCmd)
 }
 
 var RedoCmd = &cobra.Command{

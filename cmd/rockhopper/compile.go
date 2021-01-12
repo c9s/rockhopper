@@ -12,7 +12,7 @@ import (
 func init() {
 	CompileCmd.Flags().StringP("output", "o", "pkg/migrations", "path to the migrations package")
 	CompileCmd.Flags().BoolP("no-build", "B", false, "do not build the migration package")
-	RootCmd.AddCommand(CompileCmd)
+	rootCmd.AddCommand(CompileCmd)
 }
 
 var CompileCmd = &cobra.Command{

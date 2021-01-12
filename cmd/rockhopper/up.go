@@ -12,7 +12,7 @@ import (
 func init() {
 	UpCmd.Flags().Int64("to", 0, "up to a specific version")
 	UpCmd.Flags().Int("steps", 0, "run upgrade by steps")
-	RootCmd.AddCommand(UpCmd)
+	rootCmd.AddCommand(UpCmd)
 }
 
 var UpCmd = &cobra.Command{

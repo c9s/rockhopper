@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -14,7 +15,7 @@ import (
 
 var config *rockhopper.Config
 
-var RootCmd = &cobra.Command{
+var rootCmd = &cobra.Command{
 	Use:   "rh",
 	Short: "rockhopper migration tool",
 	Long:  "rockhopper is a migration tool written in Go",
@@ -22,47 +23,48 @@ var RootCmd = &cobra.Command{
 	// SilenceUsage is an option to silence usage when an error occurs.
 	SilenceUsage: true,
 
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		configFile := viper.GetString("config")
+		_, err := os.Stat(configFile)
+		if err != nil && os.IsNotExist(err) {
+			return fmt.Errorf("config file %s does not exist", configFile)
+		}
+
+		// load config into the global instance
+		config, err = rockhopper.LoadConfig(configFile)
+		if err != nil {
+			return err
+			log.Fatal(err)
+		}
+
+		return nil
+	},
+
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return nil
 	},
 }
 
 func init() {
-	RootCmd.PersistentFlags().Bool("debug", false, "debug flag")
-	RootCmd.PersistentFlags().String("config", "rockhopper.yaml", "config file")
-}
+	rootCmd.PersistentFlags().Bool("debug", false, "debug flag")
+	rootCmd.PersistentFlags().String("config", "rockhopper.yaml", "rockhopper config file")
 
-func main() {
+	// Once the flags are defined, we can bind config keys with flags.
+	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
+		log.WithError(err).Errorf("failed to bind persistent flags. please check the persistent flags settings.")
+	}
+
 	viper.SetEnvPrefix("ROCKHOPPER_")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
 	// Enable environment variable binding, the env vars are not overloaded yet.
 	viper.AutomaticEnv()
 
-	// Once the flags are defined, we can bind config keys with flags.
-	if err := viper.BindPFlags(RootCmd.PersistentFlags()); err != nil {
-		log.WithError(err).Errorf("failed to bind persistent flags. please check the flag settings.")
-	}
-
-	if err := viper.BindPFlags(RootCmd.Flags()); err != nil {
-		log.WithError(err).Errorf("failed to bind local flags. please check the flag settings.")
-	}
-
 	log.SetFormatter(&prefixed.TextFormatter{})
+}
 
-	configFile := viper.GetString("config")
-	_, err := os.Stat(configFile)
-	if err != nil && os.IsNotExist(err) {
-		log.Fatalf("config file %s does not exist", configFile)
-	}
-
-	// load config into the global instance
-	config, err = rockhopper.LoadConfig(configFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := RootCmd.Execute(); err != nil {
+func main() {
+	if err := rootCmd.Execute(); err != nil {
 		log.WithError(err).Fatalf("cannot execute command")
 	}
 }

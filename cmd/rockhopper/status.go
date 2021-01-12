@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	RootCmd.AddCommand(StatusCmd)
+	rootCmd.AddCommand(StatusCmd)
 }
 
 var StatusCmd = &cobra.Command{

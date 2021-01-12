@@ -12,7 +12,7 @@ import (
 func init() {
 	DownCmd.Flags().Int64("to", 0, "downgrade to a specific version")
 	DownCmd.Flags().Int("steps", 0, "downgrade by steps")
-	RootCmd.AddCommand(DownCmd)
+	rootCmd.AddCommand(DownCmd)
 }
 
 var DownCmd = &cobra.Command{

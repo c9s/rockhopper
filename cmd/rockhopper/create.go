@@ -8,7 +8,7 @@ import (
 
 func init() {
 	CreateCmd.Flags().StringP("type", "t", "sql", "migration type, could be \"go\" or \"sql\"")
-	RootCmd.AddCommand(CreateCmd)
+	rootCmd.AddCommand(CreateCmd)
 }
 
 var CreateCmd = &cobra.Command{
