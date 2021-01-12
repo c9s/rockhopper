@@ -78,25 +78,25 @@ rockhooper --config rockhopper_sqlite3.yaml status
 // load config into the global instance
 config, err = rockhopper.LoadConfig(configFile)
 if err != nil {
-log.Fatal(err)
+    log.Fatal(err)
 }
 
 db, err := rockhopper.OpenByConfig(config)
 if err != nil {
-return err
+    return err
 }
 
 defer db.Close()
 
 currentVersion, err = db.CurrentVersion()
 if err != nil {
-return err
+    return err
 }
 
 loader := &rockhopper.SqlMigrationLoader{}
 migrations, err := loader.Load(config.MigrationsDir)
 if err != nil {
-return err
+    return err
 }
 
 for _, m := range migrations {
