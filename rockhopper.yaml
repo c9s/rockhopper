@@ -1,0 +1,5 @@
+---
+driver: mysql
+dialect: mysql
+dsn: "root@tcp(localhost:3306)/rockhopper?parseTime=true"
+migrationsDir: migrations
