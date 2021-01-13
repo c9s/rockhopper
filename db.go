@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -32,7 +33,65 @@ func OpenByConfig(config *Config) (*DB, error) {
 		return nil, err
 	}
 
-	return Open(config.Driver, config.DSN, dialect)
+	dsn := config.DSN
+	if len(dsn) == 0 {
+		dsn, err = BuildDSNFromEnvVars(config.Driver)
+		if err != nil {
+			return nil, errors.Wrap(err, "dsn is not defined, can not build dsn")
+		}
+	}
+
+	return Open(config.Driver, dsn, dialect)
+}
+
+func BuildDSNFromEnvVars(driver string) (string, error) {
+	switch driver {
+	case "mysql":
+		return buildMySqlDSN()
+
+	}
+	return "", fmt.Errorf("can not build dsn for driver %s", driver)
+}
+
+func buildMySqlDSN() (string, error) {
+	dsn := ""
+	user := "root"
+
+	if v, ok := os.LookupEnv("MYSQL_USER"); ok {
+		user = v
+		dsn += v
+	}
+
+	if v, ok := os.LookupEnv("MYSQL_PASSWORD"); ok {
+		dsn += ":" + v
+	} else if v, ok := os.LookupEnv("MYSQL_PASS"); ok {
+		dsn += ":" + v
+	} else if user == "root" {
+		if v, ok := os.LookupEnv("MYSQL_ROOT_PASSWORD"); ok {
+			dsn = ":" + v
+		}
+	}
+
+	address := ""
+	if v, ok := os.LookupEnv("MYSQL_HOST"); ok {
+		address = v
+	}
+
+	if v, ok := os.LookupEnv("MYSQL_PORT"); ok {
+		address += ":" + v
+	}
+
+	if v, ok := os.LookupEnv("MYSQL_PROTOCOL"); ok {
+		dsn += v + "(" + address + ")"
+	} else {
+		dsn += "tcp(" + address + ")"
+	}
+
+	if v, ok := os.LookupEnv("MYSQL_DATABASE"); ok {
+		dsn += "/" + v
+	}
+
+	return dsn, nil
 }
 
 // Open creates a connection to a database
