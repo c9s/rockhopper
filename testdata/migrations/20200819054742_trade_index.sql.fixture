@@ -1,0 +1,14 @@
+upStmts:
+    - direction: 1
+      sql: CREATE INDEX trades_symbol ON trades(symbol);
+    - direction: 1
+      sql: CREATE INDEX trades_symbol_fee_currency ON trades(symbol, fee_currency, traded_at);
+    - direction: 1
+      sql: CREATE INDEX trades_traded_at_symbol ON trades(traded_at, symbol);
+downStmts:
+    - direction: -1
+      sql: DROP INDEX trades_symbol ON trades;
+    - direction: -1
+      sql: DROP INDEX trades_symbol_fee_currency ON trades;
+    - direction: -1
+      sql: DROP INDEX trades_traded_at_symbol ON trades;
