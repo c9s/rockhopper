@@ -26,13 +26,17 @@ var CompileCmd = &cobra.Command{
 }
 
 func compile(cmd *cobra.Command, args []string) error {
+	if err := checkConfig(config); err != nil {
+		return err
+	}
+
 	outputDir, err := cmd.Flags().GetString("output")
 	if err != nil {
 		return err
 	}
 
 	var loader rockhopper.SqlMigrationLoader
-	migrations, err := loader.Load("testdata/migrations")
+	migrations, err := loader.Load(config.MigrationsDir)
 	if err != nil {
 		return err
 	}
