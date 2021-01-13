@@ -22,18 +22,10 @@ var (
 	ErrVersionNotFound = errors.New("version not found")
 
 	SqlMigrationFilenamePattern = regexp.MustCompile("(\\d+)_(\\w+)\\.sql$")
-
-	snakeCasePattern = regexp.MustCompile("_[a-z]+")
 )
 
 func replaceExt(s string, ext string) string {
 	return regexp.MustCompile("\\.\\w+$").ReplaceAllString(s, ext)
-}
-
-func toCamelCase(s string) string {
-	return snakeCasePattern.ReplaceAllStringFunc(s, func(s string) string {
-		return strings.ToTitle(strings.TrimLeft(s, "_"))
-	})
 }
 
 // MigrationRecord struct.

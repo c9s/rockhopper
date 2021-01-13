@@ -44,7 +44,7 @@ func CreateWithTemplate(dir string, tmpl *template.Template, name, migrationType
 
 	vars := tmplVars{
 		Version:   version,
-		CamelName: camelCase(name),
+		CamelName: toCamelCase(name),
 	}
 	if err := tmpl.Execute(f, vars); err != nil {
 		return errors.Wrap(err, "failed to execute tmpl")

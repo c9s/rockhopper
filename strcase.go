@@ -2,6 +2,7 @@ package rockhopper
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -40,24 +41,6 @@ func (s camelSnakeStateMachine) next(r rune) camelSnakeStateMachine {
 	return s
 }
 
-func camelCase(str string) string {
-	var b strings.Builder
-
-	stateMachine := idle
-	for i := 0; i < len(str); {
-		r, size := utf8.DecodeRuneInString(str[i:])
-		i += size
-		stateMachine = stateMachine.next(r)
-		switch stateMachine {
-		case firstAlphaNum:
-			b.WriteRune(unicode.ToUpper(r))
-		case alphaNum:
-			b.WriteRune(unicode.ToLower(r))
-		}
-	}
-	return b.String()
-}
-
 func snakeCase(str string) string {
 	var b bytes.Buffer
 
@@ -81,5 +64,13 @@ func snakeCase(str string) string {
 
 func isAlphaNum(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
+var snakeCasePattern = regexp.MustCompile("[_\\s]+[a-z]+")
+
+func toCamelCase(s string) string {
+	return snakeCasePattern.ReplaceAllStringFunc(s, func(s string) string {
+		return strings.Title(strings.TrimLeft(s, "_ "))
+	})
 }
 
