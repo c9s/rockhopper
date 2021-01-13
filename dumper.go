@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	rockhopper.AddNamedMigration({{ .BaseName | quote }}, up{{.CamelName}}, down{{.CamelName}})
+	rockhopper.AddMigration(up{{.CamelName}}, down{{.CamelName}})
 }
 
 func up{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
