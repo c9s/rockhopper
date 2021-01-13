@@ -21,9 +21,6 @@ var (
 
 	ErrVersionNotFound = errors.New("version not found")
 
-	// ErrNoNextVersion when the next migration version is not found.
-	ErrNoNextVersion = errors.New("no next version found")
-
 	SqlMigrationFilenamePattern = regexp.MustCompile("(\\d+)_(\\w+)\\.sql$")
 
 	snakeCasePattern = regexp.MustCompile("_[a-z]+")
