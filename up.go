@@ -2,54 +2,7 @@ package rockhopper
 
 import (
 	"context"
-
-	"github.com/spf13/viper"
 )
-
-func Run() error {
-	migrationDir := viper.GetString("migrationDir")
-
-	driver := viper.GetString("driver")
-	dsn := viper.GetString("dsn")
-
-	dialect, err := LoadDialect(driver)
-	if err != nil {
-		return err
-	}
-
-	db, err := Open(driver, dsn, dialect)
-	if err != nil {
-		return err
-	}
-
-	currentVersion, err := db.CurrentVersion()
-	if err != nil {
-		return err
-	}
-
-	var loader = &SqlMigrationLoader{}
-	migrations, err := loader.Load(migrationDir)
-	if err != nil {
-		return err
-	}
-
-	m, err := migrations.Find(currentVersion)
-	if err != nil {
-		return err
-	}
-
-	for {
-		if m.Next == nil {
-			break
-		}
-
-		// m.Up()
-
-		m = m.Next
-	}
-
-	return nil
-}
 
 func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int64, steps int, callbacks ...func(m *Migration)) error {
 	if len(migrations) == 0 {
