@@ -167,7 +167,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 			if p.endsWithSemicolon(line) {
 				upStmts = append(upStmts, Statement{
 					Direction: DirectionUp,
-					SQL:       buf.String(),
+					SQL:       strings.TrimSpace(buf.String()),
 				})
 				buf.Reset()
 			}
@@ -176,7 +176,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 			if p.endsWithSemicolon(line) {
 				downStmts = append(downStmts, Statement{
 					Direction: DirectionDown,
-					SQL:       buf.String(),
+					SQL:       strings.TrimSpace(buf.String()),
 				})
 				buf.Reset()
 			}
@@ -184,7 +184,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 		case stateUpStatementEnd:
 			upStmts = append(upStmts, Statement{
 				Direction: DirectionUp,
-				SQL:       buf.String(),
+				SQL:       strings.TrimSpace(buf.String()),
 			})
 			buf.Reset()
 			state = stateUp
@@ -192,7 +192,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 		case stateDownStatementEnd:
 			downStmts = append(downStmts, Statement{
 				Direction: DirectionDown,
-				SQL:       buf.String(),
+				SQL:       strings.TrimSpace(buf.String()),
 			})
 			buf.Reset()
 			state = stateDown
