@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	rockhopper.AddMigration(up{{.CamelName}}, down{{.CamelName}})
+	rockhopper.AddNamedMigration({{ .BaseName | quote }}, up{{.CamelName}}, down{{.CamelName}})
 }
 
 func up{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
@@ -64,10 +64,12 @@ func (d *GoMigrationDumper) Dump(m *Migration) error {
 	buf := bytes.NewBuffer(nil)
 	err := goMigrationTemplate.Execute(buf, struct {
 		CamelName   string
+		BaseName    string
 		Migration   *Migration
 		PackageName string
 	}{
 		CamelName:   strings.Title(toCamelCase(m.Name)),
+		BaseName:    filepath.Base(m.Source),
 		Migration:   m,
 		PackageName: packageName,
 	})

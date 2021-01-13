@@ -79,18 +79,6 @@ func FileNumericComponent(name string) (int64, error) {
 	return n, e
 }
 
-func filterMigrationVersions(v, current, target int64) bool {
-	if target > current {
-		return v > current && v <= target
-	}
-
-	if target < current {
-		return v <= current && v > target
-	}
-
-	return false
-}
-
 type MigrationLoader interface{}
 
 type GoMigrationLoader struct{}
