@@ -47,6 +47,10 @@ func AddMigration(up, down TransactionHandler) {
 
 // AddNamedMigration : Add a named migration.
 func AddNamedMigration(filename string, up, down TransactionHandler) {
+	if registeredGoMigrations == nil {
+		registeredGoMigrations = make(map[int64]*Migration)
+	}
+
 	v, _ := FileNumericComponent(filename)
 
 	migration := &Migration{Version: v, Registered: true, UpFn: up, DownFn: down, Source: filename}
