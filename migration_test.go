@@ -16,7 +16,7 @@ func TestMigration_UpAndDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err := Open(driverName, ":memory:", dialect)
+	db, err := Open(driverName, dialect, ":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}

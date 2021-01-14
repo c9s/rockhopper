@@ -41,7 +41,7 @@ func OpenByConfig(config *Config) (*DB, error) {
 		}
 	}
 
-	return Open(config.Driver, dsn, dialect)
+	return Open(config.Driver, dialect, dsn)
 }
 
 func BuildDSNFromEnvVars(driver string) (string, error) {
@@ -103,16 +103,31 @@ func buildMySqlDSN() (string, error) {
 	return dsn, nil
 }
 
-// Open creates a connection to a database
-func Open(driverName string, dsn string, dialect SQLDialect) (*DB, error) {
-	switch driverName {
+func castDriverName(driver string) string {
+	switch driver {
 	case "mssql":
-		driverName = "sqlserver"
+		return "sqlserver"
 	case "redshift":
-		driverName = "postgres"
+		return "postgres"
 	case "tidb":
-		driverName = "mysql"
+		return "mysql"
 	}
+
+	return driver
+}
+
+func New(driverName string, dialect SQLDialect, db *sql.DB) *DB {
+	return &DB{
+		dialect:    dialect,
+		driverName: driverName,
+		DB:         db,
+		tableName:  defaultTableName,
+	}
+}
+
+// Open creates a connection to a database
+func Open(driverName string, dialect SQLDialect, dsn string) (*DB, error) {
+	driverName = castDriverName(driverName)
 
 	switch driverName {
 	// supported drivers
@@ -126,12 +141,7 @@ func Open(driverName string, dsn string, dialect SQLDialect) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{
-		dialect:    dialect,
-		driverName: driverName,
-		DB:         db,
-		tableName:  defaultTableName,
-	}, nil
+	return New(driverName, dialect, db), nil
 }
 
 func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) error {
