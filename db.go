@@ -53,7 +53,16 @@ func BuildDSNFromEnvVars(driver string) (string, error) {
 	return "", fmt.Errorf("can not build dsn for driver %s", driver)
 }
 
+// buildMySqlDSN builds the data source name from environment variables
 func buildMySqlDSN() (string, error) {
+	if v, ok := os.LookupEnv("MYSQL_URL"); ok {
+		return v, nil
+	}
+
+	if v, ok := os.LookupEnv("MYSQL_DSN"); ok {
+		return v, nil
+	}
+
 	dsn := ""
 	user := "root"
 
