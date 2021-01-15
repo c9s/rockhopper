@@ -77,7 +77,7 @@ func init() {
 	rockhopper.AddMigration(up{{.CamelName}}, down{{.CamelName}})
 }
 
-func up{{.CamelName}}(ctx context.Context,  tx rockhopper.SQLExecutor) error {
+func up{{.CamelName}}(ctx context.Context, tx rockhopper.SQLExecutor) error {
 	// This code is executed when the migration is applied.
 	return nil
 }
