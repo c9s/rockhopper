@@ -57,6 +57,9 @@ func TestMigration_UpAndDown(t *testing.T) {
 	err = Up(ctx, db, migrations, currentVersion, 0)
 	assert.NoError(t, err)
 
+	currentVersion, err = db.CurrentVersion()
+	assert.NoError(t, err)
+
 	err = Down(ctx, db, migrations, currentVersion, 0)
 	assert.NoError(t, err)
 }

@@ -8,9 +8,7 @@ func DownBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from in
 	}
 
 	m, err := migrations.Find(from)
-	if err == ErrVersionNotFound {
-		m = migrations[len(migrations)-1]
-	} else if err != nil {
+	if err != nil { // if no migration is found, we should not continue
 		return err
 	}
 
@@ -39,13 +37,11 @@ func Down(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64
 	}
 
 	m, err := migrations.Find(from)
-	if err == ErrVersionNotFound {
-		m = migrations[len(migrations)-1]
-	} else if err != nil {
+	if err != nil { // if no migration is found, we should not continue
 		return err
 	}
 
-	for {
+	for ; m.Previous != nil; m = m.Previous {
 		if to > 0 && m.Version < to {
 			break
 		}
@@ -57,12 +53,6 @@ func Down(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64
 		for _, cb := range callbacks {
 			cb(m)
 		}
-
-		if m.Previous == nil {
-			break
-		}
-
-		m = m.Previous
 	}
 
 	return nil

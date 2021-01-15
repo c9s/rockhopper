@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -55,6 +56,10 @@ func down(cmd *cobra.Command, args []string) error {
 	currentVersion, err := db.CurrentVersion()
 	if err != nil {
 		return err
+	}
+
+	if currentVersion == 0 {
+		return fmt.Errorf("no applied migration, can not downgrade")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

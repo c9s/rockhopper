@@ -9,16 +9,17 @@ func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int6
 		return nil
 	}
 
-	m, err := migrations.Find(from)
-	if err == ErrVersionNotFound {
-		m = migrations[len(migrations)-1]
-	} else if err != nil {
-		return err
-	} else if m != nil {
-		m = m.Next
+	m := migrations[0]
+	if from > 0 {
+		fromMigration, err := migrations.Find(from)
+		if err != nil { // if from is given, ErrVersionNotFound could also be returned, and this should be treated as an error.
+			return err
+		}
+
+		m = fromMigration.Next
 	}
 
-	for ; steps > 0 && m != nil; steps-- {
+	for ; steps > 0 && m != nil; m = m.Next {
 		if err := m.Up(ctx, db); err != nil {
 			return err
 		}
@@ -27,11 +28,7 @@ func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int6
 			cb(m)
 		}
 
-		if m.Next == nil {
-			break
-		}
-
-		m = m.Next
+		steps--
 	}
 
 	return nil
@@ -42,16 +39,17 @@ func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64, 
 		return nil
 	}
 
-	m, err := migrations.Find(from)
-	if err == ErrVersionNotFound {
-		m = migrations[0]
-	} else if err != nil {
-		return err
-	} else if m != nil {
-		m = m.Next
+	m := migrations[0]
+	if from > 0 {
+		fromMigration, err := migrations.Find(from)
+		if err != nil { // if from is given, ErrVersionNotFound could also be returned, and this should be treated as an error.
+			return err
+		}
+
+		m = fromMigration.Next
 	}
 
-	for ; m != nil; {
+	for ; m != nil; m = m.Next {
 		if to > 0 && m.Version > to {
 			break
 		}
@@ -63,12 +61,6 @@ func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64, 
 		for _, cb := range callbacks {
 			cb(m)
 		}
-
-		if m.Next == nil {
-			break
-		}
-
-		m = m.Next
 	}
 
 	return nil
