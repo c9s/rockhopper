@@ -72,7 +72,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 
 	case DirectionUp:
 		if m.UpFn != nil {
-			if err := m.UpFn(ctx, executor) ; err != nil {
+			if err := m.UpFn(ctx, executor); err != nil {
 				rollback()
 				return err
 			}
@@ -90,7 +90,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 
 	case DirectionDown:
 		if m.DownFn != nil {
-			if err := m.DownFn(ctx, executor) ; err != nil {
+			if err := m.DownFn(ctx, executor); err != nil {
 				rollback()
 				return err
 			}
@@ -106,7 +106,6 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 			return errors.Wrap(err, "failed to delete version")
 		}
 	}
-
 
 	if m.UseTx && tx != nil {
 		log.Info("committing transaction...")
