@@ -2,7 +2,6 @@ package rockhopper
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,7 +34,7 @@ type MigrationRecord struct {
 	IsApplied bool // was this a result of up() or down()
 }
 
-type TransactionHandler func(ctx context.Context, tx *sql.Tx) error
+type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
 
 var registeredGoMigrations map[int64]*Migration
 
@@ -53,7 +52,15 @@ func AddNamedMigration(filename string, up, down TransactionHandler) {
 
 	v, _ := FileNumericComponent(filename)
 
-	migration := &Migration{Version: v, Registered: true, UpFn: up, DownFn: down, Source: filename}
+	migration := &Migration{
+		Version: v,
+		Registered: true,
+		UpFn: up,
+		DownFn: down,
+		Source: filename,
+		UseTx: true,
+	}
+
 	if existing, ok := registeredGoMigrations[v]; ok {
 		panic(fmt.Sprintf("failed to add migration %q: version conflicts with %q", filename, existing.Source))
 	}

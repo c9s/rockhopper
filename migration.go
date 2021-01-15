@@ -50,7 +50,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 	var executor SQLExecutor = db
 
 	if m.UseTx {
-		log.Info("migration transaction is enabled, starting transaction...")
+		log.Infof("migration transaction is enabled, starting transaction...")
 
 		tx, err = db.BeginTx(ctx, nil)
 		if err != nil {
@@ -59,21 +59,28 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 
 		executor = tx
 		rollback = func() {
-			log.Info("rolling back transaction")
+			log.Infof("rolling back transaction")
 			if err := tx.Rollback(); err != nil {
 				log.WithError(err).Error("rollback error")
 			}
 		}
 	} else {
-		log.Infof("transaction is disabled in migration version: %d", m.Version)
+		log.Debugf("transaction is disabled in migration version: %d", m.Version)
 	}
 
 	switch direction {
 
 	case DirectionUp:
-		if err := runStatements(ctx, executor, m.UpStatements); err != nil {
-			rollback()
-			return err
+		if m.UpFn != nil {
+			if err := m.UpFn(ctx, executor) ; err != nil {
+				rollback()
+				return err
+			}
+		} else {
+			if err := runStatements(ctx, executor, m.UpStatements); err != nil {
+				rollback()
+				return err
+			}
 		}
 
 		if err := db.insertVersion(ctx, executor, m.Version); err != nil {
@@ -82,9 +89,16 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 		}
 
 	case DirectionDown:
-		if err := runStatements(ctx, executor, m.DownStatements); err != nil {
-			rollback()
-			return err
+		if m.DownFn != nil {
+			if err := m.DownFn(ctx, executor) ; err != nil {
+				rollback()
+				return err
+			}
+		} else {
+			if err := runStatements(ctx, executor, m.DownStatements); err != nil {
+				rollback()
+				return err
+			}
 		}
 
 		if err := db.deleteVersion(ctx, executor, m.Version); err != nil {
