@@ -214,6 +214,11 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 func (db *DB) CurrentVersion() (int64, error) {
 	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
 	if err != nil {
+		// table exists, but there is no rows
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+
 		return 0, db.createVersionTable()
 	}
 
