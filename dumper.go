@@ -27,7 +27,7 @@ func init() {
 	rockhopper.AddMigration(up{{.CamelName}}, down{{.CamelName}})
 }
 
-func up{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
+func up{{.CamelName}}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
 	// This code is executed when the migration is applied.
 {{ range .Migration.UpStatements }}
 	_, err = tx.ExecContext(ctx, {{ .SQL | quote }})
@@ -38,7 +38,7 @@ func up{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
 	return err
 }
 
-func down{{.CamelName}}(ctx context.Context, tx *sql.Tx) (err error) {
+func down{{.CamelName}}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
 	// This code is executed when the migration is rolled back.
 {{ range .Migration.DownStatements }}
 	_, err = tx.ExecContext(ctx, {{ .SQL | quote }})
