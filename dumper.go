@@ -17,7 +17,6 @@ var goMigrationTemplate = template.Must(template.New("cmd.go-migration").Funcs(t
 }).Parse(`package {{.PackageName}}
 
 import (
-	"database/sql"
 	"context"
 
 	"github.com/c9s/rockhopper"
