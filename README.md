@@ -6,6 +6,8 @@ rockhopper
 rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an
 easy-to-use API.
 
+REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cliffs which it ascends by hopping from rock to rock.
+
 # Supported Drivers
 
 - mysql
