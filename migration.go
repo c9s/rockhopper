@@ -131,7 +131,7 @@ func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error 
 	for _, stmt := range stmts {
 		log.Infof("executing statement: %s", cleanSQL(stmt.SQL))
 		if _, err := e.ExecContext(ctx, stmt.SQL); err != nil {
-			return errors.Wrapf(err, "failed to execute SQL query %q", cleanSQL(stmt.SQL))
+			return errors.Wrapf(err, "failed to execute SQL query %q, error %s", cleanSQL(stmt.SQL), err.Error())
 		}
 	}
 
