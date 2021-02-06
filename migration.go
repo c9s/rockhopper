@@ -22,8 +22,10 @@ type Migration struct {
 	Previous *Migration
 
 	Registered bool
-	UpFn       TransactionHandler // Up go migration function
-	DownFn     TransactionHandler // Down go migration function
+	Package    string
+
+	UpFn   TransactionHandler // Up go migration function
+	DownFn TransactionHandler // Down go migration function
 
 	UpStatements   []Statement
 	DownStatements []Statement

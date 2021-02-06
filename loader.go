@@ -40,12 +40,20 @@ var registeredGoMigrations map[int64]*Migration
 
 // AddMigration adds a migration.
 func AddMigration(up, down TransactionHandler) {
-	_, filename, _, _ := runtime.Caller(1)
-	AddNamedMigration(filename, up, down)
+	pc, filename, _, _ := runtime.Caller(1)
+
+	funcName := runtime.FuncForPC(pc).Name()
+	lastSlash := strings.LastIndexByte(funcName, '/')
+	if lastSlash < 0 {
+		lastSlash = 0
+	}
+	lastDot := strings.LastIndexByte(funcName[lastSlash:], '.') + lastSlash
+	packageName := funcName[:lastDot]
+	AddNamedMigration(packageName, filename, up, down)
 }
 
 // AddNamedMigration : Add a named migration.
-func AddNamedMigration(filename string, up, down TransactionHandler) {
+func AddNamedMigration(packageName, filename string, up, down TransactionHandler) {
 	if registeredGoMigrations == nil {
 		registeredGoMigrations = make(map[int64]*Migration)
 	}
@@ -53,8 +61,10 @@ func AddNamedMigration(filename string, up, down TransactionHandler) {
 	v, _ := FileNumericComponent(filename)
 
 	migration := &Migration{
-		Version: v,
+		Package: packageName,
 		Registered: true,
+
+		Version: v,
 		UpFn: up,
 		DownFn: down,
 		Source: filename,
