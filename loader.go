@@ -113,6 +113,28 @@ func (loader *GoMigrationLoader) Load() (MigrationSlice, error) {
 	return migrations.SortAndConnect(), nil
 }
 
+func (loader *GoMigrationLoader) LoadByPackageSuffix(suffix string) (MigrationSlice, error) {
+	var migrations = MigrationSlice{}
+	for _, migration := range registeredGoMigrations {
+		if strings.HasSuffix(migration.Package, suffix) {
+			migrations = append(migrations, migration)
+		}
+	}
+
+	return migrations.SortAndConnect(), nil
+}
+
+func (loader *GoMigrationLoader) LoadByExactPackage(packageName string) (MigrationSlice, error) {
+	var migrations = MigrationSlice{}
+	for _, migration := range registeredGoMigrations {
+		if migration.Package == packageName {
+			migrations = append(migrations, migration)
+		}
+	}
+
+	return migrations.SortAndConnect(), nil
+}
+
 type SqlMigrationLoader struct {
 	parser MigrationParser
 }
