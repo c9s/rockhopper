@@ -47,11 +47,8 @@ func compile(cmd *cobra.Command, args []string) error {
 	}
 
 	var dumper = rockhopper.GoMigrationDumper{Dir: outputDir}
-	for _, migration := range migrations {
-		err = dumper.Dump(migration)
-		if err != nil {
-			return err
-		}
+	if err := dumper.Dump(migrations) ; err != nil {
+		return err
 	}
 
 	// test compile

@@ -61,14 +61,14 @@ func AddNamedMigration(packageName, filename string, up, down TransactionHandler
 	v, _ := FileNumericComponent(filename)
 
 	migration := &Migration{
-		Package: packageName,
+		Package:    packageName,
 		Registered: true,
 
 		Version: v,
-		UpFn: up,
-		DownFn: down,
-		Source: filename,
-		UseTx: true,
+		UpFn:    up,
+		DownFn:  down,
+		Source:  filename,
+		UseTx:   true,
 	}
 
 	if existing, ok := registeredGoMigrations[v]; ok {

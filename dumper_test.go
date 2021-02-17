@@ -10,7 +10,7 @@ import (
 
 func TestMigrationDumper(t *testing.T) {
 	var loader SqlMigrationLoader
-	var migrations , err = loader.Load("testdata/migrations")
+	var migrations, err = loader.Load("testdata/migrations")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, migrations)
 
@@ -21,16 +21,14 @@ func TestMigrationDumper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var dumper = GoMigrationDumper{ Dir: dir}
-	for _, migration := range migrations {
-		err = dumper.Dump(migration)
-		if !assert.NoError(t, err) {
-			return
-		}
+	var dumper = GoMigrationDumper{Dir: dir}
+	err = dumper.Dump(migrations)
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	// test compile
-	cmd := exec.Command("go", "build", "./" + dir)
+	cmd := exec.Command("go", "build", "./"+dir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
