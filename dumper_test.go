@@ -36,6 +36,15 @@ func TestMigrationDumper(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// test compile
+	testCmd := exec.Command("go", "test", "./"+dir)
+	testCmd.Stdout = os.Stdout
+	testCmd.Stderr = os.Stderr
+	err = testCmd.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = os.RemoveAll(dir)
 	if err != nil {
 		t.Fatal(err)

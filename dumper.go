@@ -17,6 +17,32 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
+var testTemplate = template.Must(
+	template.New("cmd.go-migration-api").
+		Funcs(templateFuncs).
+		Parse(`package {{.PackageName}}
+
+import (
+	"testing"
+
+	"github.com/c9s/rockhopper"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestGetMigrationsMap(t *testing.T) {
+	mm := GetMigrationsMap()
+	assert.NotEmpty(t, mm)
+}
+
+func TestMergeMigrationsMap(t *testing.T) {
+	MergeMigrationsMap(map[int64]*rockhopper.Migration{
+		2: &rockhopper.Migration{},
+		3: &rockhopper.Migration{},
+	})
+}
+
+`))
+
 var apiTemplate = template.Must(
 	template.New("cmd.go-migration-api").
 		Funcs(templateFuncs).
@@ -154,11 +180,18 @@ type apiTemplateArgs struct {
 	PackageName string
 }
 
-func renderMigrationApi(packageName string) ([]byte, error) {
+func renderTemplateAndGoFormatToFile(fp string, tpl *template.Template, a interface{}) error {
+	out, err := renderTemplateAndGoFormat(tpl, a)
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(fp, out, 0666)
+}
+
+func renderTemplateAndGoFormat(tpl *template.Template, a interface{}) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
-	err := apiTemplate.Execute(buf, apiTemplateArgs{
-		PackageName: packageName,
-	})
+	err := tpl.Execute(buf, a)
 	if err != nil {
 		return nil, err
 	}
@@ -167,20 +200,20 @@ func renderMigrationApi(packageName string) ([]byte, error) {
 }
 
 type migrationTemplateArgs struct {
-	CamelName   string
+	CamelName string
 
 	// BaseName is the file basename of the migration script.
-	BaseName    string
+	BaseName string
 
 	// Migration is the Migration metadata object
-	Migration   *Migration
+	Migration *Migration
 
 	// PackageName is the package name that will be used to render the go file.
 	PackageName string
 
 	// Global renders the migration template with the global migration registration calls.
 	// This parameter avoids migration version conflict for different sql dialect (or driver)
-	Global      bool
+	Global bool
 }
 
 func renderMigration(packageName string, m *Migration) ([]byte, error) {
@@ -209,17 +242,27 @@ func (d *GoMigrationDumper) DumpApi() error {
 		packageName = filepath.Base(d.Dir)
 	}
 
-	out, err := renderMigrationApi(packageName)
+	err := renderTemplateAndGoFormatToFile(filepath.Join(d.Dir, "migration_api.go"), apiTemplate, apiTemplateArgs{
+		PackageName: packageName,
+	})
+
 	if err != nil {
 		return err
 	}
 
-	goFilename := filepath.Join(d.Dir, "migration_api.go")
-	return ioutil.WriteFile(goFilename, out, 0666)
+	err = renderTemplateAndGoFormatToFile(filepath.Join(d.Dir, "migration_api_test.go"), testTemplate, apiTemplateArgs{
+		PackageName: packageName,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (d *GoMigrationDumper) Dump(migrations MigrationSlice) error {
-	if err := d.DumpApi() ; err != nil {
+	if err := d.DumpApi(); err != nil {
 		return err
 	}
 
@@ -232,7 +275,6 @@ func (d *GoMigrationDumper) Dump(migrations MigrationSlice) error {
 
 	return nil
 }
-
 
 func (d *GoMigrationDumper) DumpMigration(m *Migration) error {
 	packageName := d.PackageName
