@@ -8,6 +8,12 @@ easy-to-use API.
 
 REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cliffs which it ascends by hopping from rock to rock.
 
+# Features
+
+- Embeddable migration script - you can embed SQL files as go source files and compile them into a binary
+- Support multiple drivers
+- Goose compatible
+
 # Supported Drivers
 
 - mysql
