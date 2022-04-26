@@ -25,6 +25,7 @@ var apiTemplate = template.Must(
 import (
 	"runtime"
 	"strings"
+	"log"
 	"fmt"
 
 	"github.com/c9s/rockhopper"
@@ -32,6 +33,26 @@ import (
 
 var registeredGoMigrations map[int64]*rockhopper.Migration
 
+func MergeMigrationsMap(ms map[int64]*rockhopper.Migration) {
+	for k, m := range ms {
+		if _, ok := registeredGoMigrations[k] ; !ok {
+			registeredGoMigrations[k] = m
+		} else {
+			log.Printf("the migration key %d is duplicated: %+v", k, m)
+		}
+	}
+}
+
+func GetMigrationsMap() map[int64]*rockhopper.Migration {
+	return registeredGoMigrations
+}
+
+// SortedMigrations builds up the migration objects, sort them by timestamp and return as a slice
+func SortedMigrations() rockhopper.MigrationSlice {
+	return Migrations()
+}
+
+// Migrations builds up the migration objects, sort them by timestamp and return as a slice
 func Migrations() rockhopper.MigrationSlice {
 	var migrations = rockhopper.MigrationSlice{}
 	for _, migration := range registeredGoMigrations {
