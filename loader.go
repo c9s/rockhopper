@@ -18,7 +18,7 @@ var (
 	// ErrNoCurrentVersion when a current migration version is not found.
 	ErrNoCurrentVersion = errors.New("no current version found")
 
-	ErrVersionNotFound = errors.New("version not found")
+	ErrVersionNotFound = errors.New("migration version not found")
 
 	SqlMigrationFilenamePattern = regexp.MustCompile("(\\d+)_(\\w+)\\.sql$")
 )

@@ -153,6 +153,13 @@ func (ms MigrationSlice) Less(i, j int) bool {
 	return ms[i].Version < ms[j].Version
 }
 
+func (ms MigrationSlice) Versions() (versions []int64) {
+	for _, migration := range ms {
+		versions = append(versions, migration.Version)
+	}
+	return versions
+}
+
 // Find finds the migration by version
 func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 	for i, migration := range ms {
@@ -161,7 +168,7 @@ func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 		}
 	}
 
-	return nil, ErrVersionNotFound
+	return nil, fmt.Errorf("migration source version %d not found, available versions: %v", version, ms.Versions())
 }
 
 func (ms MigrationSlice) SortAndConnect() MigrationSlice {
