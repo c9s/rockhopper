@@ -48,11 +48,11 @@ func (m *Migration) Down(ctx context.Context, db *DB) error {
 func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error {
 	var err error
 	var tx *sql.Tx = nil
-	var rollback = func() {}
+	var rollback = func(err error) {}
 	var executor SQLExecutor = db
 
 	if m.UseTx {
-		log.Infof("migration transaction is enabled, starting transaction...")
+		log.Debug("migration transaction is enabled, starting transaction...")
 
 		tx, err = db.BeginTx(ctx, nil)
 		if err != nil {
@@ -60,10 +60,13 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 		}
 
 		executor = tx
-		rollback = func() {
-			log.Infof("rolling back transaction")
-			if err := tx.Rollback(); err != nil {
-				log.WithError(err).Error("rollback error")
+		rollback = func(err error) {
+			if err != nil {
+				log.WithError(err).Errorf("error occured, rolling back transaction for version %d (source %s)...", m.Version, m.Source)
+			}
+
+			if err2 := tx.Rollback(); err2 != nil {
+				log.WithError(err2).Errorf("rollback error, can not rollback for version %d (source %s)", m.Version, m.Source)
 			}
 		}
 	} else {
@@ -73,46 +76,50 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 	switch direction {
 
 	case DirectionUp:
+		log.Infof("upgrading to version %d...", m.Version)
 		if m.UpFn != nil {
 			if err := m.UpFn(ctx, executor); err != nil {
-				rollback()
-				return err
+				rollback(err)
+				return errors.Wrapf(err, "failed to upgrade version %d", m.Version)
 			}
 		} else {
 			if err := runStatements(ctx, executor, m.UpStatements); err != nil {
-				rollback()
-				return err
+				rollback(err)
+				return errors.Wrapf(err, "failed to upgrade version %d", m.Version)
 			}
 		}
 
 		if err := db.insertVersion(ctx, executor, m.Version); err != nil {
-			rollback()
-			return errors.Wrap(err, "failed to insert new goose version")
+			rollback(err)
+			return errors.Wrap(err, "failed to insert new migration version")
 		}
+		log.Infof("upgraded to version %d successfully", m.Version)
 
 	case DirectionDown:
 		if m.DownFn != nil {
 			if err := m.DownFn(ctx, executor); err != nil {
-				rollback()
-				return err
+				rollback(err)
+				return errors.Wrapf(err, "failed to downgrade version %d", m.Version)
 			}
 		} else {
 			if err := runStatements(ctx, executor, m.DownStatements); err != nil {
-				rollback()
-				return err
+				rollback(err)
+				return errors.Wrapf(err, "failed to downgrade version %d", m.Version)
 			}
 		}
 
 		if err := db.deleteVersion(ctx, executor, m.Version); err != nil {
-			rollback()
-			return errors.Wrap(err, "failed to delete version")
+			rollback(err)
+			return errors.Wrapf(err, "failed to delete migration version %d", m.Version)
 		}
+
+		log.Infof("downgraded from version %d successfully", m.Version)
 	}
 
 	if m.UseTx && tx != nil {
-		log.Info("committing transaction...")
+		log.Debug("committing transaction...")
 		if err := tx.Commit(); err != nil {
-			return errors.Wrap(err, "failed to commit transaction")
+			return errors.Wrapf(err, "failed to commit transaction for version %d (source %s)", m.Version, m.Source)
 		}
 	}
 
