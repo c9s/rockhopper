@@ -52,11 +52,11 @@ jobs:
 
     - name: Test Migration SQL Files For MySQL
       run: |
-        rockhopper --config rockhopper_mysql.yaml up
+        go run ./cmd/rockhopper --config rockhopper_mysql.yaml up
 
     - name: Test Migration SQL Files For SQLite
       run: |
-        rockhopper --config rockhopper_sqlite.yaml up
+        go run ./cmd/rockhopper --config rockhopper_sqlite.yaml up
 
     - name: Build
       run: go build -v ./cmd/rockhopper
