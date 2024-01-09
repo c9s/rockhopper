@@ -1,0 +1,84 @@
+name: Go
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches:
+    - "main"
+    - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        redis-version:
+        - "6.2"
+        go-version:
+        - "1.20"
+    env:
+      MYSQL_DATABASE: bbgo
+      MYSQL_USER: "root"
+      MYSQL_PASSWORD: "root" # pragma: allowlist secret
+
+    steps:
+
+    - uses: actions/checkout@v2
+      with:
+        # lfs: 'true'
+        ssh-key: ${{ secrets.git_ssh_key }}
+
+    - uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Set up MySQL
+      run: |
+        sudo /etc/init.d/mysql start
+        mysql -e 'CREATE DATABASE ${{ env.MYSQL_DATABASE }};' -u${{ env.MYSQL_USER }} -p${{ env.MYSQL_PASSWORD }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Test Migration SQL Files For MySQL
+      run: |
+        rockhopper --config rockhopper_mysql.yaml up
+
+    - name: Test Migration SQL Files For SQLite
+      run: |
+        rockhopper --config rockhopper_sqlite.yaml up
+
+    - name: Build
+      run: go build -v ./cmd/rockhopper
+
+    - name: Test
+      run: |
+        go test -race -coverprofile coverage.txt -covermode atomic ./pkg/...
+        sed -i -e '/_requestgen.go/d' coverage.txt
+
+    - name: Revive Check
+      uses: morphy2k/revive-action@v2.5.4 # https://github.com/mgechev/revive/issues/956
+      with:
+        reporter: github-pr-review
+        fail_on_error: true
+
+    - name: Upload Coverage Report
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.txt,./coverage_dnum.txt
+
+    - name: Create dotenv file
+      run: |
+        echo "DB_DRIVER=mysql" >> .env.local
+        echo "DB_DSN=root:root@/bbgo" >> .env.local
+
