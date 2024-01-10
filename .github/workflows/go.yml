@@ -63,7 +63,7 @@ jobs:
 
     - name: Test
       run: |
-        go test -race -coverprofile coverage.txt -covermode atomic ./pkg/...
+        go test -race -coverprofile coverage.txt -covermode atomic ./...
         sed -i -e '/_requestgen.go/d' coverage.txt
 
     - name: Revive Check
