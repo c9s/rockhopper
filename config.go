@@ -1,7 +1,7 @@
 package rockhopper
 
 import (
-	"io/ioutil"
+	"os"
 
 	"github.com/codingconcepts/env"
 	"gopkg.in/yaml.v3"
@@ -16,7 +16,7 @@ type Config struct {
 }
 
 func LoadConfig(configFile string) (*Config, error) {
-	data, err := ioutil.ReadFile(configFile)
+	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return nil, err
 	}
