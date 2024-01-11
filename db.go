@@ -41,7 +41,7 @@ func OpenByConfig(config *Config) (*DB, error) {
 		}
 	}
 
-	return Open(config.Driver, dialect, dsn)
+	return Open(config.Driver, dialect, dsn, defaultTableName)
 }
 
 func BuildDSNFromEnvVars(driver string) (string, error) {
@@ -116,17 +116,17 @@ func castDriverName(driver string) string {
 	return driver
 }
 
-func New(driverName string, dialect SQLDialect, db *sql.DB) *DB {
+func New(driverName string, dialect SQLDialect, db *sql.DB, tableName string) *DB {
 	return &DB{
 		dialect:    dialect,
 		driverName: driverName,
 		DB:         db,
-		tableName:  defaultTableName,
+		tableName:  tableName,
 	}
 }
 
 // Open creates a connection to a database
-func Open(driverName string, dialect SQLDialect, dsn string) (*DB, error) {
+func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (*DB, error) {
 	driverName = castDriverName(driverName)
 
 	switch driverName {
@@ -141,7 +141,7 @@ func Open(driverName string, dialect SQLDialect, dsn string) (*DB, error) {
 		return nil, err
 	}
 
-	return New(driverName, dialect, db), nil
+	return New(driverName, dialect, db, tableName), nil
 }
 
 func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) error {
