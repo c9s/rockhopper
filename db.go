@@ -3,7 +3,6 @@ package rockhopper
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"os"
 
