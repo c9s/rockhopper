@@ -12,6 +12,7 @@ type Config struct {
 	Dialect       string `json:"dialect" yaml:"dialect" env:"ROCKHOPPER_DIALECT"`
 	DSN           string `json:"dsn" yaml:"dsn" env:"ROCKHOPPER_DSN"`
 	MigrationsDir string `json:"migrationsDir" yaml:"migrationsDir" env:"ROCKHOPPER_MIGRATIONS_DIR"`
+	TableName     string `json:"tableName" yaml:"tableName" env:"ROCKHOPPER_TABLE_NAME"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
