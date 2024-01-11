@@ -10,10 +10,11 @@ type MySQLDialect struct{}
 
 func (m MySQLDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-                id serial NOT NULL,
-                version_id bigint NOT NULL,
-                is_applied boolean NOT NULL,
-                tstamp timestamp NULL default now(),
+                id SERIAL NOT NULL,
+                package VARCHAR(125) NOT NULL DEFAULT 'main',
+                version_id BIGINT NOT NULL,
+                is_applied BOOLEAN NOT NULL,
+                tstamp TIMESTAMP NULL DEFAULT NOW(),
                 PRIMARY KEY(id)
             );`, tableName)
 }

@@ -3,6 +3,7 @@ package rockhopper
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 
@@ -152,7 +153,7 @@ func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) 
 	return nil
 }
 
-func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, version int64) error {
+func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
 	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), version, true); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
 	}
@@ -167,7 +168,7 @@ func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
 	var err = db.QueryRow(q, version).Scan(&row.Time, &row.IsApplied)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		} else {
 			return nil, errors.Wrap(err, "failed to query the latest migration")
@@ -215,7 +216,7 @@ func (db *DB) CurrentVersion() (int64, error) {
 	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
 	if err != nil {
 		// table exists, but there is no rows
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
 		}
 

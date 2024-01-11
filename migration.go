@@ -12,17 +12,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const defaultPackageName = "main"
+
+// Migration presents the migration script object as a linked-list node.
+// It could link to the next migration object and the previous migration object
 type Migration struct {
 	Name    string
 	Source  string // path to .sql script
 	Version int64
 	UseTx   bool
 
-	Next     *Migration
+	// Next is the next migration to apply (newer migration)
+	Next *Migration
+
+	// Previous is the previous migration (older migration)
 	Previous *Migration
 
 	Registered bool
-	Package    string
+
+	// Package is the migration script package name
+	Package string
 
 	UpFn   TransactionHandler // Up go migration function
 	DownFn TransactionHandler // Down go migration function
@@ -89,7 +98,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 			}
 		}
 
-		if err := db.insertVersion(ctx, executor, m.Version); err != nil {
+		if err := db.insertVersion(ctx, executor, defaultPackageName, m.Version); err != nil {
 			rollback(err)
 			return errors.Wrap(err, "failed to insert new migration version")
 		}

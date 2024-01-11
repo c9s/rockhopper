@@ -29,9 +29,10 @@ func replaceExt(s string, ext string) string {
 
 // MigrationRecord struct.
 type MigrationRecord struct {
-	VersionID int64
-	Time      time.Time
-	IsApplied bool // was this a result of up() or down()
+	VersionID int64     `db:"version_id"`
+	Time      time.Time `db:"time"`
+	IsApplied bool      `db:"is_applied"` // was this a result of up() or down()
+	Package   string    `db:"package"`
 }
 
 type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
@@ -139,7 +140,7 @@ type SqlMigrationLoader struct {
 	parser MigrationParser
 }
 
-// CollectMigrations returns all the valid looking migration scripts in the
+// Load returns all the valid looking migration scripts in the
 // migrations folder and go func registry, and key them by version.
 func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
