@@ -1,6 +1,6 @@
 module github.com/c9s/rockhopper
 
-go 1.18
+go 1.20
 
 require (
 	github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482

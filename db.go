@@ -153,7 +153,7 @@ func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) 
 }
 
 func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), version, true); err != nil {
+	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), pkgName, version, true); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
 	}
 
@@ -278,7 +278,7 @@ func (db *DB) createVersionTable() error {
 
 	version := 0
 	applied := true
-	if _, err := txn.Exec(db.dialect.insertVersionSQL(db.tableName), version, applied); err != nil {
+	if _, err := txn.Exec(db.dialect.insertVersionSQL(db.tableName), corePackageName, version, applied); err != nil {
 		if err := txn.Rollback(); err != nil {
 			log.WithError(err).Error("insert version, rollback error")
 		}

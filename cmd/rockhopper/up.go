@@ -17,7 +17,7 @@ func init() {
 
 var UpCmd = &cobra.Command{
 	Use:   "up",
-	Short: "upgrade database",
+	Short: "run migration scripts to upgrade database schema",
 
 	// SilenceUsage is an option to silence usage when an error occurs.
 	SilenceUsage: true,

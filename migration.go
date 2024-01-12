@@ -13,6 +13,7 @@ import (
 )
 
 const defaultPackageName = "main"
+const corePackageName = "rockhopper"
 
 // Migration presents the migration script object as a linked-list node.
 // It could link to the next migration object and the previous migration object

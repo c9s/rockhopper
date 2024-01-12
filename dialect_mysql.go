@@ -15,12 +15,13 @@ func (m MySQLDialect) createVersionTableSQL(tableName string) string {
                 version_id BIGINT NOT NULL,
                 is_applied BOOLEAN NOT NULL,
                 tstamp TIMESTAMP NULL DEFAULT NOW(),
-                PRIMARY KEY(id)
+                PRIMARY KEY(id),
+				UNIQUE unique_version(version_id)
             );`, tableName)
 }
 
 func (m MySQLDialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (version_id, is_applied) VALUES (?, ?);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES (?, ?, ?);", tableName)
 }
 
 func (m MySQLDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
