@@ -8,6 +8,11 @@ import (
 // PostgresDialect struct.
 type PostgresDialect struct{}
 
+func (d PostgresDialect) getTableNamesSQL() string {
+	return `SELECT table_name FROM information_schema.tables 
+		WHERE table_type='BASE TABLE' AND table_schema='public'`
+}
+
 func (d PostgresDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
             	id serial NOT NULL,

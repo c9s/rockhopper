@@ -8,6 +8,10 @@ import (
 // SqlServerDialect struct.
 type SqlServerDialect struct{}
 
+func (m SqlServerDialect) getTableNamesSQL() string {
+	return `SELECT * FROM SYS.TABLES;`
+}
+
 func (m SqlServerDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE %s (
                 id INT NOT NULL IDENTITY(1,1) PRIMARY KEY,

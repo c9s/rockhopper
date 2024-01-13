@@ -8,6 +8,10 @@ import (
 // MySQLDialect struct.
 type MySQLDialect struct{}
 
+func (m MySQLDialect) getTableNamesSQL() string {
+	return `SELECT table_name FROM information_schema.tables`
+}
+
 func (m MySQLDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
                 id SERIAL NOT NULL,

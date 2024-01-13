@@ -8,6 +8,10 @@ import (
 // Sqlite3Dialect struct.
 type Sqlite3Dialect struct{}
 
+func (m Sqlite3Dialect) getTableNamesSQL() string {
+	return `SELECT name FROM sqlite_master WHERE type='table'`
+}
+
 func (m Sqlite3Dialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

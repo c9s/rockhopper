@@ -152,6 +152,10 @@ func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) 
 	return nil
 }
 
+func (db *DB) getTableNames(ctx context.Context) {
+
+}
+
 func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
 	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), pkgName, version, true); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
@@ -160,6 +164,7 @@ func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string,
 	return nil
 }
 
+// FindMigration finds one migration by the given version ID
 func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
 	var row MigrationRecord
 
