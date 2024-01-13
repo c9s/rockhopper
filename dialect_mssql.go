@@ -22,11 +22,11 @@ func (m SqlServerDialect) createVersionTableSQL(tableName string) string {
 }
 
 func (m SqlServerDialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (version_id, is_applied) VALUES (@p1, @p2);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES (@p1, @p2, @p3);", tableName)
 }
 
 func (m SqlServerDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT version_id, is_applied FROM %s ORDER BY id DESC", tableName))
+	rows, err := db.Query(fmt.Sprintf("SELECT package, version_id, is_applied FROM %s ORDER BY id DESC", tableName))
 	if err != nil {
 		return nil, err
 	}

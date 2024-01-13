@@ -286,8 +286,10 @@ func (db *DB) CurrentVersion() (int64, error) {
 	return 0, ErrNoCurrentVersion
 }
 
-// Create the db version table
-// and insert the initial 0 value into it
+const VersionGoose = 0
+const VersionRockHopper = 1
+
+// createVersionTable creates the db version table and insert the initial value 0 into the migration table
 func (db *DB) createVersionTable() error {
 	txn, err := db.Begin()
 	if err != nil {
@@ -301,7 +303,7 @@ func (db *DB) createVersionTable() error {
 		return err
 	}
 
-	version := 0
+	version := VersionGoose
 	applied := true
 	if _, err := txn.Exec(db.dialect.insertVersionSQL(db.tableName), corePackageName, version, applied); err != nil {
 		if err := txn.Rollback(); err != nil {
