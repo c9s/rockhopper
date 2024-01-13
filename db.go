@@ -152,8 +152,28 @@ func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) 
 	return nil
 }
 
-func (db *DB) getTableNames(ctx context.Context) {
+func (db *DB) getTableNames(ctx context.Context) ([]string, error) {
+	q := db.dialect.getTableNamesSQL()
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var tableNames []string
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			return tableNames, err
+		}
+
+		tableNames = append(tableNames, tableName)
+	}
+
+	return tableNames, nil
 }
 
 func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
