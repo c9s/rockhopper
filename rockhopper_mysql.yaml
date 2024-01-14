@@ -5,10 +5,10 @@ driver: mysql
 dialect: mysql
 
 # unix socket connection to mysql with password
-dsn: "root:123123@unix(/opt/local/var/run/mysql57/mysqld.sock)/test?parseTime=true"
+# dsn: "root:123123@unix(/opt/local/var/run/mysql57/mysqld.sock)/test?parseTime=true"
 
-# tcp connection to mysql with password
-# dsn: "root:root@tcp(localhost:3306)/bbgo?parseTime=true"
+# tcp connection to mysql with password (for github)
+dsn: "root:root@tcp(localhost:3306)/bbgo?parseTime=true"
 
 # tcp connection to mysql without password
 # dsn: "root@tcp(localhost:3306)/bbgo_dev?parseTime=true"
