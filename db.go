@@ -10,6 +10,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// legacyGooseTableName is the legacy table name
+const legacyGooseTableName = "goose_db_version"
+
+// defaultRockhopperTableName is the new version table name
+const defaultRockhopperTableName = "rockhopper_versions"
+
 type SQLExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
@@ -41,7 +47,7 @@ func OpenByConfig(config *Config) (*DB, error) {
 		}
 	}
 
-	return Open(config.Driver, dialect, dsn, defaultTableName)
+	return Open(config.Driver, dialect, dsn, legacyGooseTableName)
 }
 
 func BuildDSNFromEnvVars(driver string) (string, error) {
@@ -236,6 +242,68 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 	return records, nil
 }
 
+func (db *DB) MigrateCore(ctx context.Context) error {
+	tableNames, err := db.getTableNames(ctx)
+	if err != nil {
+		return err
+	}
+
+	// check if it's the latest version
+	if sliceContains(tableNames, defaultRockhopperTableName) {
+		// we are good
+		return nil
+	} else if sliceContains(tableNames, legacyGooseTableName) {
+		// the legacy version
+		return db.migrateGooseTable(ctx)
+	}
+
+	return nil
+}
+
+// migrateGooseTable migrates the legacy goose version table to the new rockhopper version table
+func (db *DB) migrateGooseTable(ctx context.Context) error {
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return err
+	}
+
+	if err := db.createVersionTable(tx, defaultRockhopperTableName, VersionRockhopperV1); err != nil {
+		return err
+	}
+
+	switch db.dialect.(type) {
+	case *MySQLDialect, *RedshiftDialect, *TiDBDialect:
+		if err := execAndCheckErr(tx, ctx,
+			`ALTER TABLE goose_db_version ADD COLUMN package VARCHAR(125) NOT NULL DEFAULT 'main'`); err != nil {
+			return rollbackAndLogErr(err, tx, "unable to alter table")
+		}
+
+		if err := execAndCheckErr(tx, ctx,
+			fmt.Sprintf(`RENAME TABLE %s TO %s`, legacyGooseTableName, defaultRockhopperTableName)); err != nil {
+			return err
+		}
+
+	case *Sqlite3Dialect, *PostgresDialect, *SqlServerDialect:
+		if err := execAndCheckErr(tx, ctx,
+			fmt.Sprintf(`INSERT INTO %s(id, package, version_id, is_applied, tstamp) SELECT id, 'main', version_id, is_applied, tstamp FROM %s`,
+				defaultRockhopperTableName,
+				legacyGooseTableName),
+		); err != nil {
+			return rollbackAndLogErr(err, tx, "unable to execute insert from select")
+		}
+
+		if err := execAndCheckErr(tx, ctx, fmt.Sprintf(`DROP TABLE %s`, legacyGooseTableName)); err != nil {
+			return rollbackAndLogErr(err, tx, "unable to drop legacy table")
+		}
+
+	default:
+
+	}
+
+	return tx.Commit()
+}
+
+// CurrentVersion get the current version of the migration version table
 func (db *DB) CurrentVersion() (int64, error) {
 	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
 	if err != nil {
@@ -244,7 +312,16 @@ func (db *DB) CurrentVersion() (int64, error) {
 			return 0, nil
 		}
 
-		return 0, db.createVersionTable()
+		txn, txnErr := db.Begin()
+		if txnErr != nil {
+			return 0, txnErr
+		}
+
+		if err := db.createVersionTable(txn, db.tableName, VersionRockhopperV1); err != nil {
+			return 0, rollbackAndLogErr(err, txn, "unable to create versions table")
+		}
+
+		return VersionRockhopperV1, txn.Commit()
 	}
 
 	if err := rows.Close(); err != nil {
@@ -287,31 +364,50 @@ func (db *DB) CurrentVersion() (int64, error) {
 }
 
 const VersionGoose = 0
-const VersionRockHopper = 1
+const VersionRockhopperV1 = 1
 
-// createVersionTable creates the db version table and insert the initial value 0 into the migration table
-func (db *DB) createVersionTable() error {
-	txn, err := db.Begin()
+// createVersionTable creates the db version table and inserts the initial value 0 into the migration table
+func (db *DB) createVersionTable(txn *sql.Tx, tableName string, initVersion int) error {
+	if _, err := txn.Exec(db.dialect.createVersionTableSQL(tableName)); err != nil {
+		return rollbackAndLogErr(err, txn, "unable to create version table")
+	}
+
+	if err := db.insertInitialVersion(context.Background(), txn, tableName, initVersion); err != nil {
+		return rollbackAndLogErr(err, txn, "unable to insert version")
+	}
+
+	return nil
+}
+
+func (db *DB) insertInitialVersion(ctx context.Context, txn SqlExecutor, tableName string, initVersion int) error {
+	_, err := txn.ExecContext(ctx, db.dialect.insertVersionSQL(tableName), corePackageName, initVersion, true)
+	return err
+}
+
+func sliceContains(a []string, b string) bool {
+	for _, s := range a {
+		if s == b {
+			return true
+		}
+	}
+	return false
+}
+
+func rollbackAndLogErr(originErr error, txn *sql.Tx, msg string, args ...any) error {
+	if err := txn.Rollback(); err != nil {
+		log.WithError(err).Errorf("unable to rollback transaction")
+		return errors.Wrapf(originErr, msg, args...)
+	}
+
+	return originErr
+}
+
+func execAndCheckErr(db SqlExecutor, ctx context.Context, sql string, args ...interface{}) error {
+	_, err := db.ExecContext(ctx, sql, args...)
 	if err != nil {
+		log.WithError(err).Errorf("unable to execute SQL: %s", sql)
 		return err
 	}
 
-	if _, err := txn.Exec(db.dialect.createVersionTableSQL(db.tableName)); err != nil {
-		if err := txn.Rollback(); err != nil {
-			log.WithError(err).Error("create version table, rollback error")
-		}
-		return err
-	}
-
-	version := VersionGoose
-	applied := true
-	if _, err := txn.Exec(db.dialect.insertVersionSQL(db.tableName), corePackageName, version, applied); err != nil {
-		if err := txn.Rollback(); err != nil {
-			log.WithError(err).Error("insert version, rollback error")
-		}
-
-		return err
-	}
-
-	return txn.Commit()
+	return nil
 }

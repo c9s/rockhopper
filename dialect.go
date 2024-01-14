@@ -5,13 +5,6 @@ import (
 	"fmt"
 )
 
-var defaultTableName = "goose_db_version"
-
-// TableName returns goose db version table name
-func TableName() string {
-	return defaultTableName
-}
-
 // SQLDialect abstracts the details of specific SQL dialects
 // for goose's few SQL specific statements
 type SQLDialect interface {
@@ -41,7 +34,3 @@ func LoadDialect(d string) (SQLDialect, error) {
 
 	return nil, fmt.Errorf("%q: unknown dialect", d)
 }
-
-// //////////////////////////
-// TiDB
-// //////////////////////////

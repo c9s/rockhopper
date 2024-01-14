@@ -14,10 +14,10 @@ func (d RedshiftDialect) getTableNamesSQL() string {
 
 func (d RedshiftDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE %s (
-            	id integer NOT NULL identity(1, 1),
-                version_id bigint NOT NULL,
-                is_applied boolean NOT NULL,
-                tstamp timestamp NULL default sysdate,
+            	id INTEGER NOT NULL identity(1, 1),
+                version_id BIGINT NOT NULL,
+                is_applied BOOLEAN NOT NULL,
+                tstamp TIMESTAMP NULL default sysdate,
                 PRIMARY KEY(id)
             );`, tableName)
 }

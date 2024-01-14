@@ -16,7 +16,7 @@ func TestMigration_UpAndDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err := Open(driverName, dialect, ":memory:", defaultTableName)
+	db, err := Open(driverName, dialect, ":memory:", legacyGooseTableName)
 	if err != nil {
 		t.Fatal(err)
 	}

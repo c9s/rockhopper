@@ -12,7 +12,7 @@ func TestOpen(t *testing.T) {
 	dialect, err := LoadDialect("sqlite3")
 	assert.NoError(t, err)
 
-	db, err := Open("sqlite3", dialect, ":memory:", defaultTableName)
+	db, err := Open("sqlite3", dialect, ":memory:", legacyGooseTableName)
 	assert.NoError(t, err)
 	assert.NotNil(t, db)
 
