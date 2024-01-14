@@ -18,7 +18,7 @@ func (m MySQLDialect) createVersionTableSQL(tableName string) string {
                 package VARCHAR(125) NOT NULL DEFAULT 'main',
                 version_id BIGINT NOT NULL,
                 is_applied BOOLEAN NOT NULL,
-                tstamp TIMESTAMP NULL DEFAULT NOW(),
+                tstamp TIMESTAMP NOT NULL DEFAULT NOW(),
                 PRIMARY KEY(id),
 				UNIQUE unique_version(version_id)
             );`, tableName)

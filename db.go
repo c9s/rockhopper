@@ -47,7 +47,7 @@ func OpenByConfig(config *Config) (*DB, error) {
 		}
 	}
 
-	return Open(config.Driver, dialect, dsn, legacyGooseTableName)
+	return Open(config.Driver, dialect, dsn, defaultRockhopperTableName)
 }
 
 func BuildDSNFromEnvVars(driver string) (string, error) {
@@ -228,7 +228,7 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 	var records []MigrationRecord
 	for rows.Next() {
 		var row MigrationRecord
-		if err = rows.Scan(&row.VersionID, &row.IsApplied); err != nil {
+		if err = rows.Scan(&row.Package, &row.VersionID, &row.IsApplied); err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")
 		}
 
@@ -251,13 +251,24 @@ func (db *DB) MigrateCore(ctx context.Context) error {
 	// check if it's the latest version
 	if sliceContains(tableNames, defaultRockhopperTableName) {
 		// we are good
+		// TODO: check the core version row
 		return nil
 	} else if sliceContains(tableNames, legacyGooseTableName) {
 		// the legacy version
 		return db.migrateGooseTable(ctx)
 	}
 
-	return nil
+	// no version table found, create the version table with the latest schema
+	txn, txnErr := db.Begin()
+	if txnErr != nil {
+		return txnErr
+	}
+
+	if err := db.createVersionTable(ctx, txn, db.tableName, VersionRockhopperV1); err != nil {
+		return err
+	}
+
+	return txn.Commit()
 }
 
 // migrateGooseTable migrates the legacy goose version table to the new rockhopper version table
@@ -267,7 +278,7 @@ func (db *DB) migrateGooseTable(ctx context.Context) error {
 		return err
 	}
 
-	if err := db.createVersionTable(tx, defaultRockhopperTableName, VersionRockhopperV1); err != nil {
+	if err := db.createVersionTable(ctx, tx, defaultRockhopperTableName, VersionRockhopperV1); err != nil {
 		return err
 	}
 
@@ -280,7 +291,7 @@ func (db *DB) migrateGooseTable(ctx context.Context) error {
 
 		if err := execAndCheckErr(tx, ctx,
 			fmt.Sprintf(`RENAME TABLE %s TO %s`, legacyGooseTableName, defaultRockhopperTableName)); err != nil {
-			return err
+			return rollbackAndLogErr(err, tx, "unable to rename table")
 		}
 
 	case *Sqlite3Dialect, *PostgresDialect, *SqlServerDialect:
@@ -305,6 +316,10 @@ func (db *DB) migrateGooseTable(ctx context.Context) error {
 
 // CurrentVersion get the current version of the migration version table
 func (db *DB) CurrentVersion() (int64, error) {
+	if err := db.MigrateCore(context.Background()); err != nil {
+		return 0, err
+	}
+
 	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
 	if err != nil {
 		// table exists, but there is no rows
@@ -317,7 +332,7 @@ func (db *DB) CurrentVersion() (int64, error) {
 			return 0, txnErr
 		}
 
-		if err := db.createVersionTable(txn, db.tableName, VersionRockhopperV1); err != nil {
+		if err := db.createVersionTable(context.Background(), txn, db.tableName, VersionRockhopperV1); err != nil {
 			return 0, rollbackAndLogErr(err, txn, "unable to create versions table")
 		}
 
@@ -367,12 +382,12 @@ const VersionGoose = 0
 const VersionRockhopperV1 = 1
 
 // createVersionTable creates the db version table and inserts the initial value 0 into the migration table
-func (db *DB) createVersionTable(txn *sql.Tx, tableName string, initVersion int) error {
-	if _, err := txn.Exec(db.dialect.createVersionTableSQL(tableName)); err != nil {
+func (db *DB) createVersionTable(ctx context.Context, txn *sql.Tx, tableName string, initVersion int) error {
+	if _, err := txn.ExecContext(ctx, db.dialect.createVersionTableSQL(tableName)); err != nil {
 		return rollbackAndLogErr(err, txn, "unable to create version table")
 	}
 
-	if err := db.insertInitialVersion(context.Background(), txn, tableName, initVersion); err != nil {
+	if err := db.insertInitialVersion(ctx, txn, tableName, initVersion); err != nil {
 		return rollbackAndLogErr(err, txn, "unable to insert version")
 	}
 

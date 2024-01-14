@@ -8,15 +8,37 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestLegacyGooseTableMigration_sqlite3(t *testing.T) {
+	driverName := "sqlite3"
+	dialect, err := LoadDialect(driverName)
+	assert.NoError(t, err)
+
+	db, err := Open(driverName, dialect, ":memory:", legacyGooseTableName)
+	assert.NoError(t, err)
+
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS legacyGooseTableName (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                package TEXT NOT NULL DEFAULT 'main',
+                version_id INTEGER NOT NULL,
+                is_applied INTEGER NOT NULL,
+                tstamp TIMESTAMP DEFAULT (datetime('now'))) `)
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+	err = db.MigrateCore(ctx)
+	assert.NoError(t, err)
+}
+
 func TestMigration_UpAndDown(t *testing.T) {
 	driverName := "sqlite3"
-
 	dialect, err := LoadDialect(driverName)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	db, err := Open(driverName, dialect, ":memory:", legacyGooseTableName)
+	db, err := Open(driverName, dialect, ":memory:", defaultRockhopperTableName)
 	if err != nil {
 		t.Fatal(err)
 	}

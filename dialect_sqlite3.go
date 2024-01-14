@@ -15,6 +15,7 @@ func (m Sqlite3Dialect) getTableNamesSQL() string {
 func (m Sqlite3Dialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                package TEXT NOT NULL DEFAULT 'main',
                 version_id INTEGER NOT NULL,
                 is_applied INTEGER NOT NULL,
                 tstamp TIMESTAMP DEFAULT (datetime('now'))
