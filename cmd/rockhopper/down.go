@@ -53,7 +53,8 @@ func down(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	currentVersion, err := db.CurrentVersion()
+	ctx := context.Background()
+	currentVersion, err := db.CurrentVersion(ctx)
 	if err != nil {
 		return err
 	}

@@ -36,13 +36,13 @@ func redo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	currentVersion, err := db.CurrentVersion()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	currentVersion, err := db.CurrentVersion(ctx)
 	if err != nil {
 		return err
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	return rockhopper.Redo(ctx, db, currentVersion, migrations)
 }

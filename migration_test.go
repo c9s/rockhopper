@@ -54,7 +54,8 @@ func TestMigration_UpAndDown(t *testing.T) {
 
 	defer db.Close()
 
-	currentVersion, err := db.CurrentVersion()
+	ctx := context.Background()
+	currentVersion, err := db.CurrentVersion(ctx)
 	assert.NoError(t, err)
 
 	migrations := MigrationSlice{
@@ -83,12 +84,10 @@ func TestMigration_UpAndDown(t *testing.T) {
 	migrations = migrations.SortAndConnect()
 	assert.NotEmpty(t, migrations)
 
-	ctx := context.Background()
-
 	err = Up(ctx, db, migrations, currentVersion, 0)
 	assert.NoError(t, err)
 
-	currentVersion, err = db.CurrentVersion()
+	currentVersion, err = db.CurrentVersion(ctx)
 	assert.NoError(t, err)
 
 	err = Down(ctx, db, migrations, currentVersion, 0)

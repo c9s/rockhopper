@@ -227,6 +227,8 @@ func (db *DB) RunCoreMigration(ctx context.Context) error {
 		return err
 	}
 
+	log.Infof("found tableNames: %+v", tableNames)
+
 	// check if it's the latest version
 	if sliceContains(tableNames, TableName) {
 		// if so, we are good
@@ -236,6 +238,8 @@ func (db *DB) RunCoreMigration(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
+		log.Infof("found latest core package version: %d", latestVersion)
 
 		return db.upgradeCoreMigrations(ctx, latestVersion)
 	} else if sliceContains(tableNames, legacyGooseTableName) {
@@ -247,10 +251,10 @@ func (db *DB) RunCoreMigration(ctx context.Context) error {
 	return db.createVersionTable(ctx, db, VersionRockhopperV1)
 }
 
-func (db *DB) upgradeCoreMigrations(ctx context.Context, version int64) error {
-	if version < 1 { /* do something */
+func (db *DB) upgradeCoreMigrations(ctx context.Context, currentVersion int64) error {
+	if currentVersion < 1 { /* do something */
 	}
-	if version < 2 { /* do something */
+	if currentVersion < 2 { /* do something */
 	}
 	return nil
 }
@@ -264,12 +268,16 @@ func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, er
 		return 0, err
 	}
 
-	var versionId int64
+	var versionId sql.NullInt64
 	if err := row.Scan(&versionId); err != nil {
 		return 0, err
 	}
 
-	return versionId, nil
+	if versionId.Valid {
+		return versionId.Int64, nil
+	}
+
+	return 0, nil
 }
 
 // migrateLegacyGooseTable migrates the legacy goose version table to the new rockhopper version table
@@ -340,35 +348,27 @@ func (db *DB) Touch(ctx context.Context) error {
 }
 
 // CurrentVersion get the current version of the migration version table
-func (db *DB) CurrentVersion() (int64, error) {
-	ctx := context.Background()
+func (db *DB) CurrentVersion(ctx context.Context) (int64, error) {
 	if err := db.RunCoreMigration(ctx); err != nil {
 		return 0, err
 	}
 
-	version, err := db.queryLatestVersion(ctx, defaultPackageName)
+	packageName := defaultPackageName
+	version, err := db.queryLatestVersion(ctx, packageName)
 	if err != nil {
 		// table exists, but there is no rows
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
 		}
 
-		txn, txnErr := db.Begin()
-		if txnErr != nil {
-			return 0, txnErr
+		if err := db.createVersionTable(ctx, db.DB, VersionRockhopperV1); err != nil {
+			return 0, err
 		}
 
-		if err := db.createVersionTable(context.Background(), txn, VersionRockhopperV1); err != nil {
-			return 0, rollbackAndLogErr(err, txn, "unable to create versions table")
-		}
-
-		return VersionRockhopperV1, txn.Commit()
+		return VersionRockhopperV1, nil
 	}
 
-	if version == 0 {
-		return 0, ErrNoCurrentVersion
-	}
-
+	log.Infof("found %s version: %d", packageName, version)
 	return version, nil
 }
 

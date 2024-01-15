@@ -52,13 +52,15 @@ func up(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	currentVersion, err := db.CurrentVersion()
-	if err != nil {
-		return err
-	}
+	log.Infof("loaded %d migrations", len(migrations))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	currentVersion, err := db.CurrentVersion(ctx)
+	if err != nil {
+		return err
+	}
 
 	if steps > 0 {
 		return rockhopper.UpBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
@@ -67,7 +69,7 @@ func up(cmd *cobra.Command, args []string) error {
 	}
 
 	return rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
-		log.Infof("migration %v is applied", m.Version)
+		log.Infof("migration %d is applied", m.Version)
 	})
 
 }

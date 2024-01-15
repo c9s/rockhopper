@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -48,7 +49,10 @@ func status(cmd *cobra.Command, args []string) error {
 
 	defer db.Close()
 
-	_, err = db.CurrentVersion()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, err = db.CurrentVersion(ctx)
 	if err != nil {
 		return err
 	}

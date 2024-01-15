@@ -9,7 +9,7 @@ import (
 type MySQLDialect struct{}
 
 func (m MySQLDialect) getTableNamesSQL() string {
-	return `SELECT table_name FROM information_schema.tables`
+	return `SHOW TABLES`
 }
 
 func (m MySQLDialect) createVersionTableSQL(tableName string) string {
