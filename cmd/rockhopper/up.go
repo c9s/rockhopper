@@ -39,7 +39,7 @@ func up(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	db, err := rockhopper.OpenByConfig(config)
+	db, err := rockhopper.OpenWithConfig(config)
 	if err != nil {
 		return err
 	}

@@ -27,7 +27,7 @@ func TestLegacyGooseTableMigration_sqlite3(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
-	err = db.MigrateCore(ctx)
+	err = db.RunCoreMigration(ctx)
 	assert.NoError(t, err)
 
 	tx, err := db.Begin()
@@ -47,7 +47,7 @@ func TestMigration_UpAndDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err := Open(driverName, dialect, ":memory:", defaultRockhopperTableName)
+	db, err := Open(driverName, dialect, ":memory:", TableName)
 	if err != nil {
 		t.Fatal(err)
 	}

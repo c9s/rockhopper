@@ -23,7 +23,7 @@ var RedoCmd = &cobra.Command{
 }
 
 func redo(cmd *cobra.Command, args []string) error {
-	db, err := rockhopper.OpenByConfig(config)
+	db, err := rockhopper.OpenWithConfig(config)
 	if err != nil {
 		return err
 	}
@@ -46,4 +46,3 @@ func redo(cmd *cobra.Command, args []string) error {
 
 	return rockhopper.Redo(ctx, db, currentVersion, migrations)
 }
-

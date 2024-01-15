@@ -26,6 +26,14 @@ func (m Sqlite3Dialect) insertVersionSQL(tableName string) string {
 	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES (?, ?, ?);", tableName)
 }
 
+func (m Sqlite3Dialect) selectLastVersionSQL(tableName string) string {
+	return fmt.Sprintf("SELECT MAX(version_id) FROM %s WHERE package = ?", tableName)
+}
+
+func (m Sqlite3Dialect) queryVersionsSQL(tableName string) string {
+	return fmt.Sprintf("SELECT package, version_id, is_applied, tstamp FROM %s WHERE package = ? ORDER BY id DESC", tableName)
+}
+
 func (m Sqlite3Dialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
 	rows, err := db.Query(fmt.Sprintf("SELECT package, version_id, is_applied from %s ORDER BY id DESC", tableName))
 	if err != nil {
@@ -36,7 +44,7 @@ func (m Sqlite3Dialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows,
 }
 
 func (m Sqlite3Dialect) migrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT tstamp, is_applied FROM %s WHERE version_id=? ORDER BY tstamp DESC LIMIT 1", tableName)
+	return fmt.Sprintf("SELECT tstamp, is_applied FROM %s WHERE version_id = ? ORDER BY tstamp DESC LIMIT 1", tableName)
 }
 
 func (m Sqlite3Dialect) deleteVersionSQL(tableName string) string {

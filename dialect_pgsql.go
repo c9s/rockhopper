@@ -10,21 +10,29 @@ type PostgresDialect struct{}
 
 func (d PostgresDialect) getTableNamesSQL() string {
 	return `SELECT table_name FROM information_schema.tables 
-		WHERE table_type='BASE TABLE' AND table_schema='public'`
+		WHERE table_type = 'BASE TABLE' AND table_schema = 'public'`
 }
 
 func (d PostgresDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
             	id serial NOT NULL,
-                version_id bigint NOT NULL,
-                is_applied boolean NOT NULL,
-                tstamp timestamp NULL default now(),
+                version_id BIGINT NOT NULL,
+                is_applied BOOLEAN NOT NULL,
+                tstamp TIMESTAMP NULL DEFAULT NOW(),
                 PRIMARY KEY(id)
             );`, tableName)
 }
 
 func (d PostgresDialect) insertVersionSQL(tableName string) string {
 	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES ($1, $2, $3);", tableName)
+}
+
+func (d PostgresDialect) selectLastVersionSQL(tableName string) string {
+	return fmt.Sprintf("SELECT MAX(version_id) FROM %s WHERE package = $1", tableName)
+}
+
+func (d PostgresDialect) queryVersionsSQL(tableName string) string {
+	return fmt.Sprintf("SELECT package, version_id, is_applied, tstamp FROM %s WHERE package = $1 ORDER BY id DESC", tableName)
 }
 
 func (d PostgresDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {

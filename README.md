@@ -89,6 +89,8 @@ rockhooper --config rockhopper_sqlite3.yaml status
 
 # API
 
+With config file:
+
 ```go
 // load config into the global instance
 config, err = rockhopper.LoadConfig(configFile)
@@ -121,6 +123,38 @@ for _, m := range migrations {
 err = rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
     log.Infof("migration %v is applied", m.Version)
 })
+```
+
+Without config file:
+
+```go
+driver := os.Getenv("DB_DRIVER")
+
+dialect, err := rockhopper.LoadDialect(driver)
+if err != nil {
+	return err
+}
+
+var migrations rockhopper.MigrationSlice
+
+switch s.Driver {
+	case "sqlite3":
+		migrations = sqlite3Migrations.Migrations()
+	case "mysql":
+		migrations = mysqlMigrations.Migrations()
+}
+
+// sqlx.DB is different from sql.DB
+rh := rockhopper.New(s.Driver, dialect, s.DB.DB)
+
+currentVersion, err := rh.CurrentVersion()
+if err != nil {
+	return err
+}
+
+if err := rockhopper.Up(ctx, rh, migrations, currentVersion, 0); err != nil {
+	return err
+}
 ```
 
 # License

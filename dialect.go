@@ -12,7 +12,15 @@ type SQLDialect interface {
 	createVersionTableSQL(tableName string) string // sql string to create the db version table
 	insertVersionSQL(tableName string) string      // sql string to insert the initial version table row
 	deleteVersionSQL(tableName string) string      // sql string to delete version
-	migrationSQL(tableName string) string          // sql string to retrieve migrations
+
+	// migrationSQL returns the sql string to retrieve migrations
+	migrationSQL(tableName string) string
+
+	// selectLastVersionSQL returns the sql string to get the latest version
+	selectLastVersionSQL(tableName string) string
+
+	// queryVersionsSQL returns the sql string to query the version info descending
+	queryVersionsSQL(tableName string) string
 	dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error)
 }
 

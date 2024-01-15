@@ -10,11 +10,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	VersionGoose        = 0
+	VersionRockhopperV1 = 1
+)
+
 // legacyGooseTableName is the legacy table name
 const legacyGooseTableName = "goose_db_version"
 
-// defaultRockhopperTableName is the new version table name
-const defaultRockhopperTableName = "rockhopper_versions"
+// TableName is the migration version table name
+const TableName = "rockhopper_versions"
 
 type SQLExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
@@ -28,7 +33,7 @@ type DB struct {
 	tableName  string
 }
 
-func OpenByConfig(config *Config) (*DB, error) {
+func OpenWithConfig(config *Config) (*DB, error) {
 	dialectName := config.Dialect
 	if len(dialectName) == 0 {
 		dialectName = config.Driver
@@ -47,7 +52,7 @@ func OpenByConfig(config *Config) (*DB, error) {
 		}
 	}
 
-	return Open(config.Driver, dialect, dsn, defaultRockhopperTableName)
+	return Open(config.Driver, dialect, dsn, TableName)
 }
 
 func BuildDSNFromEnvVars(driver string) (string, error) {
@@ -57,56 +62,6 @@ func BuildDSNFromEnvVars(driver string) (string, error) {
 
 	}
 	return "", fmt.Errorf("can not build dsn for driver %s", driver)
-}
-
-// buildMySqlDSN builds the data source name from environment variables
-func buildMySqlDSN() (string, error) {
-	if v, ok := os.LookupEnv("MYSQL_URL"); ok {
-		return v, nil
-	}
-
-	if v, ok := os.LookupEnv("MYSQL_DSN"); ok {
-		return v, nil
-	}
-
-	dsn := ""
-	user := "root"
-
-	if v, ok := os.LookupEnv("MYSQL_USER"); ok {
-		user = v
-		dsn += v
-	}
-
-	if v, ok := os.LookupEnv("MYSQL_PASSWORD"); ok {
-		dsn += ":" + v
-	} else if v, ok := os.LookupEnv("MYSQL_PASS"); ok {
-		dsn += ":" + v
-	} else if user == "root" {
-		if v, ok := os.LookupEnv("MYSQL_ROOT_PASSWORD"); ok {
-			dsn = ":" + v
-		}
-	}
-
-	address := ""
-	if v, ok := os.LookupEnv("MYSQL_HOST"); ok {
-		address = v
-	}
-
-	if v, ok := os.LookupEnv("MYSQL_PORT"); ok {
-		address += ":" + v
-	}
-
-	if v, ok := os.LookupEnv("MYSQL_PROTOCOL"); ok {
-		dsn += v + "(" + address + ")"
-	} else {
-		dsn += "tcp(" + address + ")"
-	}
-
-	if v, ok := os.LookupEnv("MYSQL_DATABASE"); ok {
-		dsn += "/" + v
-	}
-
-	return dsn, nil
 }
 
 func castDriverName(driver string) string {
@@ -122,13 +77,24 @@ func castDriverName(driver string) string {
 	return driver
 }
 
-func New(driverName string, dialect SQLDialect, db *sql.DB, tableName string) *DB {
-	return &DB{
-		dialect:    dialect,
-		driverName: driverName,
-		DB:         db,
-		tableName:  tableName,
+func OpenWithEnv(prefix string) (*DB, error) {
+	driverName := os.Getenv(prefix + "_DRIVER")
+	if driverName == "" {
+		return nil, fmt.Errorf("env %s_DRIVER is not defined", prefix)
 	}
+
+	dialectName := os.Getenv(prefix + "_DIALECT")
+	if dialectName == "" {
+		dialectName = driverName
+	}
+
+	dialect, err := LoadDialect(dialectName)
+	if err != nil {
+		return nil, err
+	}
+
+	dsn := os.Getenv(prefix + "_DSN")
+	return Open(driverName, dialect, dsn, TableName)
 }
 
 // Open creates a connection to a database
@@ -148,6 +114,15 @@ func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (
 	}
 
 	return New(driverName, dialect, db, tableName), nil
+}
+
+func New(driverName string, dialect SQLDialect, db *sql.DB, tableName string) *DB {
+	return &DB{
+		dialect:    dialect,
+		driverName: driverName,
+		DB:         db,
+		tableName:  tableName,
+	}
 }
 
 func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
@@ -195,7 +170,7 @@ func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
 	var row MigrationRecord
 
 	var q = db.dialect.migrationSQL(db.tableName)
-	var err = db.QueryRow(q, version).Scan(&row.Time, &row.IsApplied)
+	var err = db.QueryRow(q, version).Scan(&row.Time, &row.IsApplied, &row.Time)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -206,11 +181,14 @@ func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
 	}
 
 	return &row, nil
-
 }
 
 func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
-	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
+	return db.LoadMigrationRecordsByPackage(context.Background(), defaultPackageName)
+}
+
+func (db *DB) LoadMigrationRecordsByPackage(ctx context.Context, pkgName string) ([]MigrationRecord, error) {
+	rows, err := db.DB.QueryContext(ctx, db.dialect.queryVersionsSQL(db.tableName), pkgName)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +206,7 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 	var records []MigrationRecord
 	for rows.Next() {
 		var row MigrationRecord
-		if err = rows.Scan(&row.Package, &row.VersionID, &row.IsApplied); err != nil {
+		if err = rows.Scan(&row.Package, &row.VersionID, &row.IsApplied, &row.Time); err != nil {
 			return nil, errors.Wrap(err, "failed to scan row")
 		}
 
@@ -242,43 +220,66 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 	return records, nil
 }
 
-func (db *DB) MigrateCore(ctx context.Context) error {
+// RunCoreMigration executes the core migration
+func (db *DB) RunCoreMigration(ctx context.Context) error {
 	tableNames, err := db.getTableNames(ctx)
 	if err != nil {
 		return err
 	}
 
 	// check if it's the latest version
-	if sliceContains(tableNames, defaultRockhopperTableName) {
-		// we are good
-		// TODO: check the core version row
-		return nil
+	if sliceContains(tableNames, TableName) {
+		// if so, we are good
+
+		// check the latest core version
+		latestVersion, err := db.queryLatestVersion(ctx, corePackageName)
+		if err != nil {
+			return err
+		}
+
+		return db.upgradeCoreMigrations(ctx, latestVersion)
 	} else if sliceContains(tableNames, legacyGooseTableName) {
 		// the legacy version
-		return db.migrateGooseTable(ctx)
+		return db.migrateLegacyGooseTable(ctx)
 	}
 
 	// no version table found, create the version table with the latest schema
-	txn, txnErr := db.Begin()
-	if txnErr != nil {
-		return txnErr
-	}
-
-	if err := db.createVersionTable(ctx, txn, db.tableName, VersionRockhopperV1); err != nil {
-		return err
-	}
-
-	return txn.Commit()
+	return db.createVersionTable(ctx, db, VersionRockhopperV1)
 }
 
-// migrateGooseTable migrates the legacy goose version table to the new rockhopper version table
-func (db *DB) migrateGooseTable(ctx context.Context) error {
-	tx, err := db.DB.Begin()
-	if err != nil {
+func (db *DB) upgradeCoreMigrations(ctx context.Context, version int64) error {
+	if version < 1 { /* do something */
+	}
+	if version < 2 { /* do something */
+	}
+	return nil
+}
+
+// queryLatestVersion selects the latest db version of a package
+func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, error) {
+	row := db.DB.QueryRowContext(ctx,
+		db.dialect.selectLastVersionSQL(TableName), pkgName)
+
+	if err := row.Err(); err != nil {
+		return 0, err
+	}
+
+	var versionId int64
+	if err := row.Scan(&versionId); err != nil {
+		return 0, err
+	}
+
+	return versionId, nil
+}
+
+// migrateLegacyGooseTable migrates the legacy goose version table to the new rockhopper version table
+func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
+	if err := db.createVersionTable(ctx, db, VersionRockhopperV1); err != nil {
 		return err
 	}
 
-	if err := db.createVersionTable(ctx, tx, defaultRockhopperTableName, VersionRockhopperV1); err != nil {
+	tx, err := db.DB.Begin()
+	if err != nil {
 		return err
 	}
 
@@ -290,14 +291,25 @@ func (db *DB) migrateGooseTable(ctx context.Context) error {
 		}
 
 		if err := execAndCheckErr(tx, ctx,
-			fmt.Sprintf(`RENAME TABLE %s TO %s`, legacyGooseTableName, defaultRockhopperTableName)); err != nil {
+			fmt.Sprintf(`RENAME TABLE %s TO %s`, legacyGooseTableName, TableName)); err != nil {
 			return rollbackAndLogErr(err, tx, "unable to rename table")
 		}
 
-	case *Sqlite3Dialect, *PostgresDialect, *RedshiftDialect, *SqlServerDialect:
+	case *PostgresDialect, *RedshiftDialect:
+		if err := execAndCheckErr(tx, ctx,
+			`ALTER TABLE goose_db_version ADD COLUMN package VARCHAR(125) NOT NULL DEFAULT 'main'`); err != nil {
+			return rollbackAndLogErr(err, tx, "unable to alter table")
+		}
+
+		if err := execAndCheckErr(tx, ctx,
+			fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, legacyGooseTableName, TableName)); err != nil {
+			return rollbackAndLogErr(err, tx, "unable to rename table")
+		}
+
+	case *Sqlite3Dialect, *SqlServerDialect:
 		if err := execAndCheckErr(tx, ctx,
 			fmt.Sprintf(`INSERT INTO %s(id, package, version_id, is_applied, tstamp) SELECT id, 'main', version_id, is_applied, tstamp FROM %s`,
-				defaultRockhopperTableName,
+				TableName,
 				legacyGooseTableName),
 		); err != nil {
 			return rollbackAndLogErr(err, tx, "unable to execute insert from select")
@@ -306,21 +318,35 @@ func (db *DB) migrateGooseTable(ctx context.Context) error {
 		if err := execAndCheckErr(tx, ctx, fmt.Sprintf(`DROP TABLE %s`, legacyGooseTableName)); err != nil {
 			return rollbackAndLogErr(err, tx, "unable to drop legacy table")
 		}
-
-	default:
-
 	}
 
 	return tx.Commit()
 }
 
+// Touch checks if the version table exists, if not, create the version table
+func (db *DB) Touch(ctx context.Context) error {
+	_, err := db.queryLatestVersion(ctx, corePackageName)
+	if err == nil {
+		return nil
+	}
+
+	// table exists, but there are no rows
+	// this is unexpected; the initial core version should exist
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+
+	return db.createVersionTable(ctx, db, VersionRockhopperV1)
+}
+
 // CurrentVersion get the current version of the migration version table
 func (db *DB) CurrentVersion() (int64, error) {
-	if err := db.MigrateCore(context.Background()); err != nil {
+	ctx := context.Background()
+	if err := db.RunCoreMigration(ctx); err != nil {
 		return 0, err
 	}
 
-	rows, err := db.dialect.dbVersionQuery(db.DB, db.tableName)
+	version, err := db.queryLatestVersion(ctx, defaultPackageName)
 	if err != nil {
 		// table exists, but there is no rows
 		if errors.Is(err, sql.ErrNoRows) {
@@ -332,71 +358,27 @@ func (db *DB) CurrentVersion() (int64, error) {
 			return 0, txnErr
 		}
 
-		if err := db.createVersionTable(context.Background(), txn, db.tableName, VersionRockhopperV1); err != nil {
+		if err := db.createVersionTable(context.Background(), txn, VersionRockhopperV1); err != nil {
 			return 0, rollbackAndLogErr(err, txn, "unable to create versions table")
 		}
 
 		return VersionRockhopperV1, txn.Commit()
 	}
 
-	if err := rows.Close(); err != nil {
-		return 0, err
+	if version == 0 {
+		return 0, ErrNoCurrentVersion
 	}
 
-	records, err := db.LoadMigrationRecords()
-	if err != nil {
-		return 0, err
-	}
-
-	// The most recent record for each migration specifies
-	// whether it has been applied or rolled back.
-	// The first version we find that has been applied is the current version.
-	toSkip := make([]int64, 0)
-	for _, row := range records {
-		// have we already marked this version to be skipped?
-		skip := false
-		for _, v := range toSkip {
-			if v == row.VersionID {
-				skip = true
-				break
-			}
-		}
-
-		if skip {
-			continue
-		}
-
-		// if version has been applied we're done
-		if row.IsApplied {
-			return row.VersionID, nil
-		}
-
-		// latest version of migration has not been applied.
-		toSkip = append(toSkip, row.VersionID)
-	}
-
-	return 0, ErrNoCurrentVersion
+	return version, nil
 }
-
-const VersionGoose = 0
-const VersionRockhopperV1 = 1
 
 // createVersionTable creates the db version table and inserts the initial value 0 into the migration table
-func (db *DB) createVersionTable(ctx context.Context, txn *sql.Tx, tableName string, initVersion int) error {
-	if _, err := txn.ExecContext(ctx, db.dialect.createVersionTableSQL(tableName)); err != nil {
-		return rollbackAndLogErr(err, txn, "unable to create version table")
+func (db *DB) createVersionTable(ctx context.Context, tx SqlExecutor, initVersion int64) error {
+	if _, err := tx.ExecContext(ctx, db.dialect.createVersionTableSQL(db.tableName)); err != nil {
+		return err
 	}
 
-	if err := db.insertInitialVersion(ctx, txn, tableName, initVersion); err != nil {
-		return rollbackAndLogErr(err, txn, "unable to insert version")
-	}
-
-	return nil
-}
-
-func (db *DB) insertInitialVersion(ctx context.Context, txn SqlExecutor, tableName string, initVersion int) error {
-	_, err := txn.ExecContext(ctx, db.dialect.insertVersionSQL(tableName), corePackageName, initVersion, true)
-	return err
+	return db.insertVersion(ctx, tx, corePackageName, initVersion, true)
 }
 
 func sliceContains(a []string, b string) bool {

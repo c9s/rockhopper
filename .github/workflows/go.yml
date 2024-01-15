@@ -24,6 +24,9 @@ jobs:
       MYSQL_USER: "root"
       MYSQL_PASSWORD: "root" # pragma: allowlist secret
 
+      # DSN for mysql integration tests
+      TEST_MYSQL_DSN: "root:root@tcp(localhost:3306)/integration_test?parseTime=true"
+
     steps:
 
     - uses: actions/checkout@v2
@@ -44,6 +47,7 @@ jobs:
       run: |
         sudo /etc/init.d/mysql start
         mysql -e 'CREATE DATABASE ${{ env.MYSQL_DATABASE }};' -u${{ env.MYSQL_USER }} -p${{ env.MYSQL_PASSWORD }}
+        mysql -e 'CREATE DATABASE integration_test;' -u${{ env.MYSQL_USER }} -p${{ env.MYSQL_PASSWORD }}
 
     - name: Set up Go
       uses: actions/setup-go@v4
