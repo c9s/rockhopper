@@ -29,6 +29,15 @@ func TestLegacyGooseTableMigration_sqlite3(t *testing.T) {
 	ctx := context.Background()
 	err = db.MigrateCore(ctx)
 	assert.NoError(t, err)
+
+	tx, err := db.Begin()
+	assert.NoError(t, err)
+
+	err = db.insertVersion(ctx, tx, "main", 2000, true)
+	assert.NoError(t, err)
+
+	err = tx.Commit()
+	assert.NoError(t, err)
 }
 
 func TestMigration_UpAndDown(t *testing.T) {

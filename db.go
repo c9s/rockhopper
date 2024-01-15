@@ -150,8 +150,8 @@ func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (
 	return New(driverName, dialect, db, tableName), nil
 }
 
-func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, version int64) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.deleteVersionSQL(db.tableName), version); err != nil {
+func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
+	if _, err := tx.ExecContext(ctx, db.dialect.deleteVersionSQL(db.tableName), pkgName, version); err != nil {
 		return errors.Wrap(err, "failed to delete migration record")
 	}
 
@@ -182,8 +182,8 @@ func (db *DB) getTableNames(ctx context.Context) ([]string, error) {
 	return tableNames, nil
 }
 
-func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), pkgName, version, true); err != nil {
+func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64, applied bool) error {
+	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), pkgName, version, applied); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
 	}
 
@@ -283,7 +283,7 @@ func (db *DB) migrateGooseTable(ctx context.Context) error {
 	}
 
 	switch db.dialect.(type) {
-	case *MySQLDialect, *RedshiftDialect, *TiDBDialect:
+	case *MySQLDialect, *TiDBDialect:
 		if err := execAndCheckErr(tx, ctx,
 			`ALTER TABLE goose_db_version ADD COLUMN package VARCHAR(125) NOT NULL DEFAULT 'main'`); err != nil {
 			return rollbackAndLogErr(err, tx, "unable to alter table")
@@ -294,7 +294,7 @@ func (db *DB) migrateGooseTable(ctx context.Context) error {
 			return rollbackAndLogErr(err, tx, "unable to rename table")
 		}
 
-	case *Sqlite3Dialect, *PostgresDialect, *SqlServerDialect:
+	case *Sqlite3Dialect, *PostgresDialect, *RedshiftDialect, *SqlServerDialect:
 		if err := execAndCheckErr(tx, ctx,
 			fmt.Sprintf(`INSERT INTO %s(id, package, version_id, is_applied, tstamp) SELECT id, 'main', version_id, is_applied, tstamp FROM %s`,
 				defaultRockhopperTableName,

@@ -40,5 +40,5 @@ func (m Sqlite3Dialect) migrationSQL(tableName string) string {
 }
 
 func (m Sqlite3Dialect) deleteVersionSQL(tableName string) string {
-	return fmt.Sprintf("DELETE FROM %s WHERE version_id = ?", tableName)
+	return fmt.Sprintf("DELETE FROM %s WHERE package = ? AND version_id = ?", tableName)
 }

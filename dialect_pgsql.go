@@ -41,5 +41,5 @@ func (d PostgresDialect) migrationSQL(tableName string) string {
 }
 
 func (d PostgresDialect) deleteVersionSQL(tableName string) string {
-	return fmt.Sprintf("DELETE FROM %s WHERE version_id=$1;", tableName)
+	return fmt.Sprintf("DELETE FROM %s WHERE package = $1 AND version_id = $2", tableName)
 }

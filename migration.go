@@ -99,7 +99,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 			}
 		}
 
-		if err := db.insertVersion(ctx, executor, defaultPackageName, m.Version); err != nil {
+		if err := db.insertVersion(ctx, executor, defaultPackageName, m.Version, true); err != nil {
 			rollback(err)
 			return errors.Wrap(err, "failed to insert new migration version")
 		}
@@ -118,7 +118,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 			}
 		}
 
-		if err := db.deleteVersion(ctx, executor, m.Version); err != nil {
+		if err := db.deleteVersion(ctx, executor, "main", m.Version); err != nil {
 			rollback(err)
 			return errors.Wrapf(err, "failed to delete migration version %d", m.Version)
 		}

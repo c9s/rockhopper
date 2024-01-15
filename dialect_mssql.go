@@ -52,5 +52,5 @@ ORDER BY tstamp DESC
 }
 
 func (m SqlServerDialect) deleteVersionSQL(tableName string) string {
-	return fmt.Sprintf("DELETE FROM %s WHERE version_id = @p1", tableName)
+	return fmt.Sprintf("DELETE FROM %s WHERE package = @p1 AND version_id = @p2", tableName)
 }

@@ -40,5 +40,5 @@ func (m TiDBDialect) migrationSQL(tableName string) string {
 }
 
 func (m TiDBDialect) deleteVersionSQL(tableName string) string {
-	return fmt.Sprintf("DELETE FROM %s WHERE version_id=?;", tableName)
+	return fmt.Sprintf("DELETE FROM %s WHERE package = ? AND version_id = ?", tableName)
 }
