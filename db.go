@@ -183,7 +183,7 @@ func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
 //
 // Deprecated: use LoadMigrationRecordsByPackage instead
 func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
-	return db.LoadMigrationRecordsByPackage(context.Background(), defaultPackageName)
+	return db.LoadMigrationRecordsByPackage(context.Background(), DefaultPackageName)
 }
 
 func (db *DB) LoadMigrationRecordsByPackage(ctx context.Context, pkgName string) ([]MigrationRecord, error) {
@@ -231,7 +231,7 @@ func (db *DB) runCoreMigration(ctx context.Context) error {
 		// if so, we are good
 
 		// check the latest core version
-		latestVersion, err := db.queryLatestVersion(ctx, corePackageName)
+		latestVersion, err := db.queryLatestVersion(ctx, CorePackageName)
 		if err != nil {
 			return err
 		}
@@ -334,7 +334,7 @@ func (db *DB) Touch(ctx context.Context) error {
 		return err
 	}
 
-	_, err := db.queryLatestVersion(ctx, corePackageName)
+	_, err := db.queryLatestVersion(ctx, CorePackageName)
 	return convertNoRowsErrToNil(err)
 }
 
@@ -362,7 +362,7 @@ func (db *DB) createVersionTable(ctx context.Context, tx SqlExecutor, initVersio
 		return err
 	}
 
-	return db.insertVersion(ctx, tx, corePackageName, initVersion, true)
+	return db.insertVersion(ctx, tx, CorePackageName, initVersion, true)
 }
 
 func sliceContains(a []string, b string) bool {

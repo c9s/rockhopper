@@ -39,7 +39,7 @@ func redo(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	currentVersion, err := db.CurrentVersion(ctx, rockhopper.defaultPackageName)
+	currentVersion, err := db.CurrentVersion(ctx, rockhopper.DefaultPackageName)
 	if err != nil {
 		return err
 	}

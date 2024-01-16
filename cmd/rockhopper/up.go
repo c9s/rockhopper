@@ -39,6 +39,9 @@ func up(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	db, err := rockhopper.OpenWithConfig(config)
 	if err != nil {
 		return err
@@ -47,29 +50,31 @@ func up(cmd *cobra.Command, args []string) error {
 	defer db.Close()
 
 	loader := &rockhopper.SqlMigrationLoader{}
-	migrations, err := loader.Load(config.MigrationsDir)
+
+	allMigrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("loaded %d migrations", len(migrations))
+	log.Infof("loaded %d migrations", len(allMigrations))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	migrationMap := allMigrations.MapByPackage().SortAndConnect()
+	for pkgName, migrations := range migrationMap {
+		currentVersion, err := db.CurrentVersion(ctx, pkgName)
+		if err != nil {
+			return err
+		}
 
-	currentVersion, err := db.CurrentVersion(ctx, rockhopper.defaultPackageName)
-	if err != nil {
-		return err
-	}
+		if steps > 0 {
+			return rockhopper.UpBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
+				log.Infof("migration %v is applied", m.Version)
+			})
+		}
 
-	if steps > 0 {
-		return rockhopper.UpBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
-			log.Infof("migration %v is applied", m.Version)
+		return rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
+			log.Infof("migration %d is applied", m.Version)
 		})
 	}
 
-	return rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
-		log.Infof("migration %d is applied", m.Version)
-	})
-
+	return nil
 }

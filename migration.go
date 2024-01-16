@@ -12,8 +12,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const defaultPackageName = "main"
-const corePackageName = "rockhopper"
+const DefaultPackageName = "main"
+const CorePackageName = "rockhopper"
 
 // Migration presents the migration script object as a linked-list node.
 // It could link to the next migration object and the previous migration object
@@ -99,7 +99,7 @@ func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error 
 			}
 		}
 
-		if err := db.insertVersion(ctx, executor, defaultPackageName, m.Version, true); err != nil {
+		if err := db.insertVersion(ctx, executor, DefaultPackageName, m.Version, true); err != nil {
 			rollback(err)
 			return errors.Wrap(err, "failed to insert new migration version")
 		}
@@ -159,7 +159,24 @@ func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error 
 
 type MigrationSlice []*Migration
 
-// helpers so we can use pkg sort
+func (ms MigrationSlice) MapByPackage() MigrationMap {
+	mm := make(MigrationMap)
+
+	for _, m := range ms {
+		if len(m.Package) == 0 {
+			log.Warnf("unexpected error: found empty package name in migration script: %+v", m)
+		}
+
+		if slice, ok := mm[m.Package]; ok {
+			mm[m.Package] = append(slice, m)
+		} else {
+			mm[m.Package] = MigrationSlice{m}
+		}
+	}
+
+	return mm
+}
+
 func (ms MigrationSlice) Len() int      { return len(ms) }
 func (ms MigrationSlice) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
 func (ms MigrationSlice) Less(i, j int) bool {
@@ -188,9 +205,12 @@ func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 	return nil, fmt.Errorf("migration source version %d not found, available versions: %v", version, ms.Versions())
 }
 
-func (ms MigrationSlice) SortAndConnect() MigrationSlice {
+func (ms MigrationSlice) Sort() MigrationSlice {
 	sort.Sort(ms)
+	return ms
+}
 
+func (ms MigrationSlice) Connect() MigrationSlice {
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
 	for i, m := range ms {
@@ -204,4 +224,8 @@ func (ms MigrationSlice) SortAndConnect() MigrationSlice {
 	}
 
 	return ms
+}
+
+func (ms MigrationSlice) SortAndConnect() MigrationSlice {
+	return ms.Sort().Connect()
 }

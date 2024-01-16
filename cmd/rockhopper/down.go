@@ -54,7 +54,7 @@ func down(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	currentVersion, err := db.CurrentVersion(ctx, rockhopper.defaultPackageName)
+	currentVersion, err := db.CurrentVersion(ctx, rockhopper.DefaultPackageName)
 	if err != nil {
 		return err
 	}

@@ -136,13 +136,40 @@ func (loader *GoMigrationLoader) LoadByExactPackage(packageName string) (Migrati
 	return migrations.SortAndConnect(), nil
 }
 
+type MigrationMap map[string]MigrationSlice
+
+func (m MigrationMap) SortAndConnect() MigrationMap {
+	newM := make(MigrationMap)
+	for k, v := range m {
+		newM[k] = v.Sort().Connect()
+	}
+
+	return newM
+}
+
 type SqlMigrationLoader struct {
 	parser MigrationParser
 }
 
 // Load returns all the valid looking migration scripts in the
+// migrations folders and go func registry, and key them by version.
+func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
+	var all MigrationSlice
+	for _, d := range dirs {
+		slice, err := loader.LoadDir(d)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, slice...)
+	}
+
+	return all.SortAndConnect(), nil
+}
+
+// LoadDir returns all the valid looking migration scripts in the
 // migrations folder and go func registry, and key them by version.
-func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
+func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%s directory does not exists", dir)
 	}
@@ -162,9 +189,14 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		}
 
 		name := SqlMigrationFilenamePattern.ReplaceAllString(filepath.Base(file), "$2")
-		migration := &Migration{Version: v, Name: name, Source: file}
+		migration := &Migration{
+			Package: DefaultPackageName,
+			Version: v,
+			Name:    name,
+			Source:  file,
+		}
 
-		if err := loader.readSource(migration); err != nil {
+		if err := migration.readSource(); err != nil {
 			return nil, err
 		}
 
@@ -179,7 +211,7 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 	return migrations.SortAndConnect(), nil
 }
 
-func (loader *SqlMigrationLoader) readSource(m *Migration) error {
+func (m *Migration) readSource() error {
 	f, err := os.Open(m.Source)
 	if err != nil {
 		return errors.Wrapf(err, "ERROR %v: failed to open SQL migration file", filepath.Base(m.Source))
@@ -187,10 +219,13 @@ func (loader *SqlMigrationLoader) readSource(m *Migration) error {
 
 	defer f.Close()
 
-	upStmts, downStmts, useTx, err := loader.parser.Parse(f)
+	var parser MigrationParser
+	chunk, err := parser.Parse(f)
 	if err != nil {
 		return errors.Wrapf(err, "ERROR %v: failed to parse SQL migration file", filepath.Base(m.Source))
 	}
+
+	upStmts, downStmts, useTx := chunk.UpStmts, chunk.DownStmts, chunk.UseTx
 
 	m.UseTx = useTx
 	m.UpStatements = upStmts
