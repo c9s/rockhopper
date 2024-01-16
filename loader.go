@@ -148,7 +148,17 @@ func (m MigrationMap) SortAndConnect() MigrationMap {
 }
 
 type SqlMigrationLoader struct {
-	parser MigrationParser
+	defaultPackage string
+}
+
+func NewSqlMigrationLoader() *SqlMigrationLoader {
+	return &SqlMigrationLoader{
+		defaultPackage: DefaultPackageName,
+	}
+}
+
+func (loader *SqlMigrationLoader) SetDefaultPackage(pkgName string) {
+	loader.defaultPackage = pkgName
 }
 
 // Load returns all the valid looking migration scripts in the
@@ -182,6 +192,11 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 		return nil, err
 	}
 
+	defaultPkgName := loader.defaultPackage
+	if len(defaultPkgName) == 0 {
+		defaultPkgName = defaultPkgName
+	}
+
 	for _, file := range files {
 		v, err := FileNumericComponent(file)
 		if err != nil {
@@ -190,7 +205,7 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 
 		name := SqlMigrationFilenamePattern.ReplaceAllString(filepath.Base(file), "$2")
 		migration := &Migration{
-			Package: DefaultPackageName,
+			Package: defaultPkgName,
 			Version: v,
 			Name:    name,
 			Source:  file,
