@@ -79,3 +79,26 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 		})
 	}
 }
+
+func Test_matchPackageName(t *testing.T) {
+	t.Run("simple", func(t *testing.T) {
+		pkgName, err := matchPackageName("@package main")
+		if assert.NoError(t, err) {
+			assert.Equal(t, "main", pkgName)
+		}
+	})
+
+	t.Run("with prefix", func(t *testing.T) {
+		pkgName, err := matchPackageName("-- @package main")
+		if assert.NoError(t, err) {
+			assert.Equal(t, "main", pkgName)
+		}
+	})
+
+	t.Run("go package name", func(t *testing.T) {
+		pkgName, err := matchPackageName("-- @package github.com/c9s/bbgo")
+		if assert.NoError(t, err) {
+			assert.Equal(t, "github.com/c9s/bbgo", pkgName)
+		}
+	})
+}

@@ -23,6 +23,8 @@ type Migration struct {
 	Version int64
 	UseTx   bool
 
+	Chunk *MigrationScriptChunk
+
 	// Next is the next migration to apply (newer migration)
 	Next *Migration
 

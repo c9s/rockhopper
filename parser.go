@@ -69,6 +69,7 @@ func (p *MigrationParser) ParseString(data string) (*MigrationScriptChunk, error
 type MigrationScriptChunk struct {
 	UpStmts, DownStmts []Statement
 	UseTx              bool
+	Package            string
 }
 
 func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
@@ -104,6 +105,14 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 			cmd = strings.ToLower(strings.Replace(cmd, "+goose ", "+", -1))
 
 			switch cmd {
+			case "@package":
+				packageName, err := matchPackageName(line)
+				if err != nil {
+					return nil, errors.Wrapf(err, "incorrect package statement: %s", line)
+				}
+
+				chunk.Package = packageName
+
 			case "+up":
 				switch state {
 				case start:
@@ -245,4 +254,15 @@ func (p *MigrationParser) endsWithSemicolon(line string) bool {
 	}
 
 	return strings.HasSuffix(prev, ";")
+}
+
+var packageNameRegExp = regexp.MustCompile("@package\\s+(\\S+)")
+
+func matchPackageName(line string) (string, error) {
+	matches := packageNameRegExp.FindStringSubmatch(line)
+	if len(matches) < 2 {
+		return "", errors.New("package name not found")
+	}
+
+	return matches[1], nil
 }

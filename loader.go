@@ -225,10 +225,10 @@ func (m *Migration) readSource() error {
 		return errors.Wrapf(err, "ERROR %v: failed to parse SQL migration file", filepath.Base(m.Source))
 	}
 
-	upStmts, downStmts, useTx := chunk.UpStmts, chunk.DownStmts, chunk.UseTx
-
-	m.UseTx = useTx
-	m.UpStatements = upStmts
-	m.DownStatements = downStmts
+	m.Chunk = chunk
+	m.UseTx = chunk.UseTx
+	m.UpStatements = chunk.UpStmts
+	m.DownStatements = chunk.DownStmts
+	m.Package = chunk.Package
 	return nil
 }
