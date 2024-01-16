@@ -226,8 +226,6 @@ func (db *DB) runCoreMigration(ctx context.Context) error {
 		return err
 	}
 
-	log.Infof("found tableNames: %+v", tableNames)
-
 	// check if it's the latest version
 	if sliceContains(tableNames, TableName) {
 		// if so, we are good
@@ -264,7 +262,7 @@ func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, er
 		db.dialect.selectLastVersionSQL(TableName), pkgName)
 
 	if err := row.Err(); err != nil {
-		return 0, err
+		return 0, convertNoRowsErrToNil(err)
 	}
 
 	var versionId sql.NullInt64
@@ -337,17 +335,7 @@ func (db *DB) Touch(ctx context.Context) error {
 	}
 
 	_, err := db.queryLatestVersion(ctx, corePackageName)
-	if err == nil {
-		return nil
-	}
-
-	// table exists, but there are no rows
-	// this is unexpected; the initial core version should exist
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-
-	return db.createVersionTable(ctx, db, VersionRockhopperV1)
+	return convertNoRowsErrToNil(err)
 }
 
 // CurrentVersion get the current version of the migration version table
