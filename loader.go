@@ -222,7 +222,7 @@ func (m *Migration) readSource() error {
 	var parser MigrationParser
 	chunk, err := parser.Parse(f)
 	if err != nil {
-		return errors.Wrapf(err, "ERROR %v: failed to parse SQL migration file", filepath.Base(m.Source))
+		return errors.Wrapf(err, "%s: failed to parse SQL migration file", filepath.Base(m.Source))
 	}
 
 	m.Chunk = chunk

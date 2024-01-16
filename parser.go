@@ -28,6 +28,12 @@ const scanBufSize = 4 * 1024 * 1024
 
 var matchEmptyLines = regexp.MustCompile(`^\s*$`)
 
+var bufPool = &sync.Pool{
+	New: func() interface{} {
+		return make([]byte, scanBufSize)
+	},
+}
+
 type Direction int
 
 func (d Direction) String() string {
@@ -52,8 +58,13 @@ type Statement struct {
 	SQL       string    `json:"sql" yaml:"sql"`
 }
 
+type MigrationScriptChunk struct {
+	UpStmts, DownStmts []Statement
+	UseTx              bool
+	Package            string
+}
+
 type MigrationParser struct {
-	bufferPool *sync.Pool
 }
 
 func (p *MigrationParser) ParseBytes(data []byte) (*MigrationScriptChunk, error) {
@@ -66,26 +77,12 @@ func (p *MigrationParser) ParseString(data string) (*MigrationScriptChunk, error
 	return p.Parse(buf)
 }
 
-type MigrationScriptChunk struct {
-	UpStmts, DownStmts []Statement
-	UseTx              bool
-	Package            string
-}
-
 func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 	chunk := &MigrationScriptChunk{}
 
-	if p.bufferPool == nil {
-		p.bufferPool = &sync.Pool{
-			New: func() interface{} {
-				return make([]byte, scanBufSize)
-			},
-		}
-	}
-
 	var buf bytes.Buffer
-	scanBuf := p.bufferPool.Get().([]byte)
-	defer p.bufferPool.Put(scanBuf)
+	scanBuf := bufPool.Get().([]byte)
+	defer bufPool.Put(scanBuf)
 
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(scanBuf, scanBufSize)
@@ -237,8 +234,8 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 // Checks the line to see if the line has a statement-ending semicolon
 // or if the line contains a double-dash comment.
 func (p *MigrationParser) endsWithSemicolon(line string) bool {
-	scanBuf := p.bufferPool.Get().([]byte)
-	defer p.bufferPool.Put(scanBuf)
+	scanBuf := bufPool.Get().([]byte)
+	defer bufPool.Put(scanBuf)
 
 	prev := ""
 	scanner := bufio.NewScanner(strings.NewReader(line))
