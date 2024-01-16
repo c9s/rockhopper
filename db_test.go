@@ -46,7 +46,7 @@ func TestDB_LoadMigrations(t *testing.T) {
 	err = db.insertVersion(ctx, db.DB, defaultPackageName, 2, true)
 	assert.NoError(t, err)
 
-	records, err := db.LoadMigrationRecords()
+	records, err := db.LoadMigrationRecordsByPackage(ctx, defaultPackageName)
 	assert.NoError(t, err)
 	if assert.Len(t, records, 1) {
 		record := records[0]
@@ -127,7 +127,7 @@ func TestDB_LoadMigrations_Integration(t *testing.T) {
 					assert.NoError(t, err)
 				}()
 
-				records, err := db.LoadMigrationRecords()
+				records, err := db.LoadMigrationRecordsByPackage(ctx, defaultPackageName)
 				if assert.NoError(t, err) {
 					if assert.Len(t, records, 1) {
 						record := records[0]

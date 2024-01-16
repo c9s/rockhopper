@@ -173,16 +173,15 @@ func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
 	var err = db.QueryRow(q, version).Scan(&row.Time, &row.IsApplied, &row.Time)
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		} else {
-			return nil, errors.Wrap(err, "failed to query the latest migration")
-		}
+		return nil, convertNoRowsErrToNil(err)
 	}
 
 	return &row, nil
 }
 
+// LoadMigrationRecords
+//
+// Deprecated: use LoadMigrationRecordsByPackage instead
 func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 	return db.LoadMigrationRecordsByPackage(context.Background(), defaultPackageName)
 }
@@ -404,4 +403,12 @@ func execAndCheckErr(db SqlExecutor, ctx context.Context, sql string, args ...in
 	}
 
 	return nil
+}
+
+func convertNoRowsErrToNil(err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+
+	return err
 }
