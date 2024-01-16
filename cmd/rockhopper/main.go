@@ -59,6 +59,10 @@ func init() {
 	// Enable environment variable binding, the env vars are not overloaded yet.
 	viper.AutomaticEnv()
 
+	if viper.GetBool("DEBUG") {
+		log.SetLevel(log.DebugLevel)
+	}
+
 	log.SetFormatter(&prefixed.TextFormatter{})
 }
 

@@ -49,16 +49,28 @@ func up(cmd *cobra.Command, args []string) error {
 
 	defer db.Close()
 
-	loader := &rockhopper.SqlMigrationLoader{}
+	loader := rockhopper.NewSqlMigrationLoader(config)
 
 	allMigrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {
 		return err
 	}
 
+	if len(allMigrations) == 0 {
+		log.Infof("no migrations found")
+		return nil
+	}
+
 	log.Infof("loaded %d migrations", len(allMigrations))
 
-	migrationMap := allMigrations.MapByPackage().SortAndConnect()
+	migrationMap := allMigrations.MapByPackage()
+
+	if len(config.IncludePackages) > 0 {
+		migrationMap = migrationMap.FilterPackage(config.IncludePackages)
+	}
+
+	migrationMap = migrationMap.SortAndConnect()
+
 	for pkgName, migrations := range migrationMap {
 		currentVersion, err := db.CurrentVersion(ctx, pkgName)
 		if err != nil {

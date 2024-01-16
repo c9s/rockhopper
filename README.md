@@ -51,6 +51,12 @@ To add new migration scripts:
 rockhopper create -t sql my_first_migration
 ```
 
+Or, more advanced:
+
+```sh
+rockhopper --config rockhopper_mysql_local.yaml create -o migrations/mysql/app1 -t sql "create table 1"
+```
+
 To check migration status:
 
 ```sh

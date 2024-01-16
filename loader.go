@@ -138,6 +138,17 @@ func (loader *GoMigrationLoader) LoadByExactPackage(packageName string) (Migrati
 
 type MigrationMap map[string]MigrationSlice
 
+func (m MigrationMap) FilterPackage(pkgNames []string) MigrationMap {
+	newM := make(MigrationMap)
+	for k, v := range m {
+		if sliceContains(pkgNames, k) {
+			newM[k] = v
+		}
+	}
+
+	return newM
+}
+
 func (m MigrationMap) SortAndConnect() MigrationMap {
 	newM := make(MigrationMap)
 	for k, v := range m {
@@ -151,9 +162,14 @@ type SqlMigrationLoader struct {
 	defaultPackage string
 }
 
-func NewSqlMigrationLoader() *SqlMigrationLoader {
+func NewSqlMigrationLoader(config *Config) *SqlMigrationLoader {
+	defaultPkgName := config.Package
+	if len(defaultPkgName) == 0 {
+		defaultPkgName = DefaultPackageName
+	}
+
 	return &SqlMigrationLoader{
-		defaultPackage: DefaultPackageName,
+		defaultPackage: defaultPkgName,
 	}
 }
 
@@ -194,7 +210,7 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 
 	defaultPkgName := loader.defaultPackage
 	if len(defaultPkgName) == 0 {
-		defaultPkgName = defaultPkgName
+		defaultPkgName = DefaultPackageName
 	}
 
 	for _, file := range files {

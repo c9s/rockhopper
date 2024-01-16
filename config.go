@@ -12,14 +12,16 @@ type Config struct {
 	Dialect string `json:"dialect" yaml:"dialect" env:"ROCKHOPPER_DIALECT"`
 	DSN     string `json:"dsn" yaml:"dsn" env:"ROCKHOPPER_DSN"`
 
+	Package string `json:"package" yaml:"package"`
+
 	MigrationsDir string `json:"migrationsDir" yaml:"migrationsDir" env:"ROCKHOPPER_MIGRATIONS_DIR"`
 
 	MigrationsDirs []string `json:"migrationsDirs" yaml:"migrationsDirs" env:"ROCKHOPPER_MIGRATIONS_DIRS"`
 
 	TableName string `json:"tableName" yaml:"tableName" env:"ROCKHOPPER_TABLE_NAME"`
 
-	// Packages is the migration packages, optional
-	Packages []string `json:"packages" yaml:"packages"`
+	// IncludePackages is used as a whitelist for the migration packages, optional
+	IncludePackages []string `json:"includePackages" yaml:"includePackages"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
