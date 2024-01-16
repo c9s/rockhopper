@@ -220,8 +220,8 @@ func (db *DB) LoadMigrationRecordsByPackage(ctx context.Context, pkgName string)
 	return records, nil
 }
 
-// RunCoreMigration executes the core migration
-func (db *DB) RunCoreMigration(ctx context.Context) error {
+// runCoreMigration executes the core migration
+func (db *DB) runCoreMigration(ctx context.Context) error {
 	tableNames, err := db.getTableNames(ctx)
 	if err != nil {
 		return err
@@ -333,6 +333,10 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 
 // Touch checks if the version table exists, if not, create the version table
 func (db *DB) Touch(ctx context.Context) error {
+	if err := db.runCoreMigration(ctx); err != nil {
+		return err
+	}
+
 	_, err := db.queryLatestVersion(ctx, corePackageName)
 	if err == nil {
 		return nil
@@ -348,27 +352,20 @@ func (db *DB) Touch(ctx context.Context) error {
 }
 
 // CurrentVersion get the current version of the migration version table
-func (db *DB) CurrentVersion(ctx context.Context) (int64, error) {
-	if err := db.RunCoreMigration(ctx); err != nil {
+func (db *DB) CurrentVersion(ctx context.Context, packageName string) (int64, error) {
+	if err := db.Touch(ctx); err != nil {
 		return 0, err
 	}
 
-	packageName := defaultPackageName
 	version, err := db.queryLatestVersion(ctx, packageName)
 	if err != nil {
-		// table exists, but there is no rows
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, nil
 		}
 
-		if err := db.createVersionTable(ctx, db.DB, VersionRockhopperV1); err != nil {
-			return 0, err
-		}
-
-		return VersionRockhopperV1, nil
+		return 0, err
 	}
 
-	log.Infof("found %s version: %d", packageName, version)
 	return version, nil
 }
 

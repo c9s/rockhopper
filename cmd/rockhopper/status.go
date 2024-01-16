@@ -52,7 +52,7 @@ func status(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	_, err = db.CurrentVersion(ctx)
+	_, err = db.CurrentVersion(ctx, rockhopper.defaultPackageName)
 	if err != nil {
 		return err
 	}
