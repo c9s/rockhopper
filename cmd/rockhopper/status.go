@@ -91,13 +91,13 @@ func status(cmd *cobra.Command, args []string) error {
 		}
 
 		for _, migration := range migrations {
-			m, err := db.LoadMigration(ctx, migration)
+			_, err := db.LoadMigration(ctx, migration)
 			if err != nil {
 				return err
 			}
 
 			t.AppendRow(table.Row{
-				migration.Package, migration.Source, formatAppliedAt(m.Record), currentVersionMark(migration.Version, currentVersion),
+				migration.Package, migration.Source, formatAppliedAt(migration.Record), currentVersionMark(migration.Version, currentVersion),
 			})
 		}
 
@@ -126,7 +126,7 @@ func currentVersionMark(migrationVersion, currentVersion int64) string {
 }
 
 func formatAppliedAt(row *rockhopper.MigrationRecord) string {
-	var appliedAt = "pending"
+	var appliedAt = "Pending"
 	if row != nil && row.IsApplied {
 		appliedAt = row.Time.Format(time.ANSIC)
 	}
