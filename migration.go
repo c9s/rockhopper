@@ -56,12 +56,12 @@ func (m *Migration) String() string {
 
 // Up runs an up migration.
 func (m *Migration) Up(ctx context.Context, db *DB) error {
-	return m.run(ctx, db, DirectionUp)
+	return m.runUp(ctx, db)
 }
 
 // Down runs a down migration.
 func (m *Migration) Down(ctx context.Context, db *DB) error {
-	return m.run(ctx, db, DirectionDown)
+	return m.runDown(ctx, db)
 }
 
 type statementExecutorFunc func(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error
@@ -120,20 +120,6 @@ func (m *Migration) runDown(ctx context.Context, db *DB) error {
 
 	var executor = m.getStmtExecutor()
 	return executor(ctx, db.DB, fn, finalizer)
-}
-
-func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error {
-	switch direction {
-
-	case DirectionUp:
-		return m.runUp(ctx, db)
-
-	case DirectionDown:
-		return m.runDown(ctx, db)
-
-	default:
-		return fmt.Errorf("unexpected direction: %v", direction)
-	}
 }
 
 var (
