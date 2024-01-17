@@ -46,7 +46,7 @@ func (m MySQLDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, e
 }
 
 func (m MySQLDialect) migrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT tstamp, is_applied FROM %s WHERE version_id=? ORDER BY tstamp DESC LIMIT 1", tableName)
+	return fmt.Sprintf("SELECT id, tstamp, is_applied FROM %s WHERE package = ? AND version_id = ? ORDER BY tstamp DESC LIMIT 1", tableName)
 }
 
 func (m MySQLDialect) deleteVersionSQL(tableName string) string {

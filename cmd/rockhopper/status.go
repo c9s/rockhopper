@@ -92,13 +92,13 @@ func status(cmd *cobra.Command, args []string) error {
 		}
 
 		for _, migration := range migrations {
-			record, err := db.FindMigration(migration.Version)
+			m, err := db.LoadMigration(ctx, migration)
 			if err != nil {
 				return err
 			}
 
 			t.AppendRow(table.Row{
-				migration.Package, migration.Source, formatAppliedAt(record), currentVersionMark(migration.Version, currentVersion),
+				migration.Package, migration.Source, formatAppliedAt(m.Record), currentVersionMark(migration.Version, currentVersion),
 			})
 		}
 

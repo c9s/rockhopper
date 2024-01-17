@@ -44,7 +44,7 @@ func (d RedshiftDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows
 }
 
 func (d RedshiftDialect) migrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT tstamp, is_applied FROM %s WHERE version_id = $1 ORDER BY tstamp DESC LIMIT 1", tableName)
+	return fmt.Sprintf("SELECT id, tstamp, is_applied FROM %s WHERE package = $1 AND version_id = $2 ORDER BY tstamp DESC LIMIT 1", tableName)
 }
 
 func (d RedshiftDialect) deleteVersionSQL(tableName string) string {

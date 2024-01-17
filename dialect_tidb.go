@@ -44,7 +44,7 @@ func (m TiDBDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, er
 }
 
 func (m TiDBDialect) migrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT tstamp, is_applied FROM %s WHERE version_id=? ORDER BY tstamp DESC LIMIT 1", tableName)
+	return fmt.Sprintf("SELECT tstamp, is_applied FROM %s WHERE package = ? AND version_id = ? ORDER BY tstamp DESC LIMIT 1", tableName)
 }
 
 func (m TiDBDialect) deleteVersionSQL(tableName string) string {

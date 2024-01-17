@@ -18,10 +18,17 @@ const CorePackageName = "rockhopper"
 // Migration presents the migration script object as a linked-list node.
 // It could link to the next migration object and the previous migration object
 type Migration struct {
-	Name    string
-	Source  string // path to .sql script
+	Name string
+	// Package is the migration script package name
+	Package string
+
+	// Version is the migration version
 	Version int64
-	UseTx   bool
+
+	// Source is the path to the .sql script
+	Source string
+
+	UseTx bool
 
 	Chunk *MigrationScriptChunk
 
@@ -31,10 +38,9 @@ type Migration struct {
 	// Previous is the previous migration (older migration)
 	Previous *Migration
 
-	Registered bool
+	Record *MigrationRecord
 
-	// Package is the migration script package name
-	Package string
+	Registered bool
 
 	UpFn   TransactionHandler // Up go migration function
 	DownFn TransactionHandler // Down go migration function
@@ -145,7 +151,7 @@ func executeStatements(ctx context.Context, e SQLExecutor, stmts []Statement) er
 	for idx, stmt := range stmts {
 		log.Debug(cleanSQL(stmt.SQL))
 
-		p := profile(fmt.Sprintf("%d", idx))
+		p := startProfile(fmt.Sprintf("%d", idx))
 		if _, err := e.ExecContext(ctx, stmt.SQL); err != nil {
 			return errors.Wrapf(err, "failed to execute SQL query %q, error %s", cleanSQL(stmt.SQL), err.Error())
 		}

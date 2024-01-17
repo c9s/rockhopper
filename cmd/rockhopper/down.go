@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -46,35 +45,47 @@ func down(cmd *cobra.Command, args []string) error {
 
 	defer db.Close()
 
-	loader := &rockhopper.SqlMigrationLoader{}
-	migrations, err := loader.Load(config.MigrationsDir)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-	currentVersion, err := db.CurrentVersion(ctx, rockhopper.DefaultPackageName)
-	if err != nil {
-		return err
-	}
-
-	if currentVersion == 0 {
-		return fmt.Errorf("no applied migration, can not downgrade")
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if err := db.Touch(ctx); err != nil {
+		return err
+	}
+
+	loader := rockhopper.NewSqlMigrationLoader(config)
+
+	allMigrations, err := loader.Load(config.MigrationsDirs...)
+	if err != nil {
+		return err
+	}
+
+	if len(allMigrations) == 0 {
+		log.Infof("no migrations found")
+		return nil
+	}
+
+	log.Infof("loaded %d migrations", len(allMigrations))
+
+	allMigrations = allMigrations.SortAndConnect()
+
+	idx, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, allMigrations)
+	if err != nil {
+		return err
+	}
+
+	_ = idx
+
 	if to > 0 {
-		return rockhopper.Down(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
+		return rockhopper.Down(ctx, db, lastAppliedMigration, to, func(m *rockhopper.Migration) {
 			log.Infof("migration %v is applied for downgrade", m.Version)
 		})
 	}
+
 	if steps == 0 {
 		steps = 1
 	}
 
-	return rockhopper.DownBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
+	return rockhopper.DownBySteps(ctx, db, lastAppliedMigration, steps, func(m *rockhopper.Migration) {
 		log.Infof("migration %v is applied for downgrade", m.Version)
 	})
 }

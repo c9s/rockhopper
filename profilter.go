@@ -8,7 +8,7 @@ type Profile struct {
 	duration           time.Duration
 }
 
-func profile(name string) *Profile {
+func startProfile(name string) *Profile {
 	return &Profile{name: name, startTime: time.Now()}
 }
 

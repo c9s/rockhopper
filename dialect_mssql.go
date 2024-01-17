@@ -46,12 +46,12 @@ func (m SqlServerDialect) migrationSQL(tableName string) string {
 	const tpl = `
 WITH Migrations AS
 (
-    SELECT tstamp, is_applied,
+    SELECT id, tstamp, is_applied,
     ROW_NUMBER() OVER (ORDER BY tstamp) AS 'RowNumber'
     FROM %s 
-	WHERE version_id=@p1
+	WHERE package = @p1 AND version_id = @p2
 ) 
-SELECT tstamp, is_applied 
+SELECT id, tstamp, is_applied 
 FROM Migrations 
 WHERE RowNumber BETWEEN 1 AND 2
 ORDER BY tstamp DESC

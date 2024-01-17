@@ -28,6 +28,7 @@ func replaceExt(s string, ext string) string {
 
 // MigrationRecord struct.
 type MigrationRecord struct {
+	ID        int64     `db:"id"`
 	VersionID int64     `db:"version_id"`
 	Time      time.Time `db:"time"`
 	IsApplied bool      `db:"is_applied"` // was this a result of up() or down()

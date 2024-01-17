@@ -4,21 +4,7 @@ import (
 	"context"
 )
 
-func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int64, steps int, callbacks ...func(m *Migration)) error {
-	if len(migrations) == 0 {
-		return nil
-	}
-
-	m := migrations[0]
-	if from > 0 {
-		fromMigration, err := migrations.Find(from)
-		if err != nil { // if from is given, ErrVersionNotFound could also be returned, and this should be treated as an error.
-			return err
-		}
-
-		m = fromMigration.Next
-	}
-
+func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks ...func(m *Migration)) error {
 	for ; steps > 0 && m != nil; m = m.Next {
 		if err := m.Up(ctx, db); err != nil {
 			return err
@@ -34,21 +20,7 @@ func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int6
 	return nil
 }
 
-func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64, callbacks ...func(m *Migration)) error {
-	if len(migrations) == 0 {
-		return nil
-	}
-
-	m := migrations[0]
-	if from > 0 {
-		fromMigration, err := migrations.Find(from)
-		if err != nil { // if from is given, ErrVersionNotFound could also be returned, and this should be treated as an error.
-			return err
-		}
-
-		m = fromMigration.Next
-	}
-
+func Up(ctx context.Context, db *DB, m *Migration, to int64, callbacks ...func(m *Migration)) error {
 	for ; m != nil; m = m.Next {
 		if to > 0 && m.Version > to {
 			break

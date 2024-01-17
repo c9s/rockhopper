@@ -165,18 +165,26 @@ func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string,
 	return nil
 }
 
-// FindMigration finds one migration by the given version ID
-func (db *DB) FindMigration(version int64) (*MigrationRecord, error) {
-	var row MigrationRecord
+// LoadMigration finds the migration record from the db, and then updates the record to
+// the given Migration object. The migration.Record field will be updated.
+// When returning (nil, nil), it means the record is not found.
+func (db *DB) LoadMigration(ctx context.Context, m *Migration) (*Migration, error) {
+	var record MigrationRecord
 
 	var q = db.dialect.migrationSQL(db.tableName)
-	var err = db.QueryRow(q, version).Scan(&row.Time, &row.IsApplied, &row.Time)
 
+	row := db.QueryRowContext(ctx, q, m.Package, m.Version)
+	if err := row.Err(); err != nil {
+		return nil, convertNoRowsErrToNil(err)
+	}
+
+	var err = row.Scan(&record.Time, &record.IsApplied, &record.Time)
 	if err != nil {
 		return nil, convertNoRowsErrToNil(err)
 	}
 
-	return &row, nil
+	m.Record = &record
+	return m, nil
 }
 
 // LoadMigrationRecords
@@ -406,4 +414,25 @@ func convertNoRowsErrToNil(err error) error {
 	}
 
 	return err
+}
+
+func (db *DB) FindLastAppliedMigration(
+	ctx context.Context, allMigrations MigrationSlice,
+) (int, *Migration, error) {
+	for i := len(allMigrations) - 1; i >= 0; i-- {
+		m := allMigrations[i]
+
+		m, err := db.LoadMigration(ctx, m)
+		if err != nil {
+			return -1, nil, err
+		}
+
+		if m.Record != nil {
+			if m.Record.IsApplied {
+				return i, m, nil
+			}
+		}
+	}
+
+	return -1, nil, nil
 }

@@ -74,18 +74,25 @@ func up(cmd *cobra.Command, args []string) error {
 	migrationMap = migrationMap.SortAndConnect()
 
 	for pkgName, migrations := range migrationMap {
-		currentVersion, err := db.CurrentVersion(ctx, pkgName)
+		_ = pkgName
+
+		_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, migrations)
 		if err != nil {
 			return err
 		}
 
+		startMigration := migrations.Head()
+		if lastAppliedMigration != nil {
+			startMigration = lastAppliedMigration.Next
+		}
+
 		if steps > 0 {
-			return rockhopper.UpBySteps(ctx, db, migrations, currentVersion, steps, func(m *rockhopper.Migration) {
+			return rockhopper.UpBySteps(ctx, db, startMigration, steps, func(m *rockhopper.Migration) {
 				log.Infof("migration %v is applied", m.Version)
 			})
 		}
 
-		return rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
+		return rockhopper.Up(ctx, db, startMigration, to, func(m *rockhopper.Migration) {
 			log.Infof("migration %d is applied", m.Version)
 		})
 	}
