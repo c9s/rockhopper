@@ -101,14 +101,16 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 			// make it goose compatible, replace +goose Up to just +up
 			cmd = strings.ToLower(strings.Replace(cmd, "+goose ", "+", -1))
 
-			switch cmd {
-			case "@package":
+			if strings.HasPrefix(cmd, "@package") {
 				packageName, err := matchPackageName(line)
 				if err != nil {
 					return nil, errors.Wrapf(err, "incorrect package statement: %s", line)
 				}
 
 				chunk.Package = packageName
+			}
+
+			switch cmd {
 
 			case "+up":
 				switch state {

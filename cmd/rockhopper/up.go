@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/c9s/rockhopper"
 )
+
+var log = logrus.WithField("application", "rockhopper")
 
 func init() {
 	UpCmd.Flags().Int64("to", 0, "up to a specific version")

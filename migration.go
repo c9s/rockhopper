@@ -161,6 +161,22 @@ func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error 
 
 type MigrationSlice []*Migration
 
+func (ms MigrationSlice) Head() *Migration {
+	if len(ms) == 0 {
+		return nil
+	}
+
+	return ms[0]
+}
+
+func (ms MigrationSlice) Tail() *Migration {
+	if len(ms) == 0 {
+		return nil
+	}
+
+	return ms[len(ms)-1]
+}
+
 func (ms MigrationSlice) MapByPackage() MigrationMap {
 	mm := make(MigrationMap)
 

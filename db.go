@@ -236,11 +236,14 @@ func (db *DB) runCoreMigration(ctx context.Context) error {
 			return err
 		}
 
-		log.Infof("found latest core package version: %d", latestVersion)
+		log.Debugf("found latest core package version: %d", latestVersion)
 
 		return db.upgradeCoreMigrations(ctx, latestVersion)
 	} else if sliceContains(tableNames, legacyGooseTableName) {
+
 		// the legacy version
+		log.Debugf("found legacy goose table, migrating...")
+
 		return db.migrateLegacyGooseTable(ctx)
 	}
 

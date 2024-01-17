@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"os"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
 	"github.com/c9s/rockhopper"
@@ -57,37 +57,79 @@ func status(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	loader := &rockhopper.SqlMigrationLoader{}
-	migrations, err := loader.Load(config.MigrationsDir)
+	loader := rockhopper.NewSqlMigrationLoader(config)
+
+	allMigrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {
 		return err
 	}
 
-	log.Println("    Applied At                  Migration")
-	log.Println("    =======================================")
-	for _, migration := range migrations {
-		if err := printMigrationStatus(db, migration); err != nil {
-			return errors.Wrap(err, "failed to print status")
-		}
+	debugMigrations(allMigrations)
+
+	if len(allMigrations) == 0 {
+		log.Infof("no migrations found")
+		return nil
 	}
+
+	log.Debugf("loaded %d migrations", len(allMigrations))
+
+	migrationMap := allMigrations.MapByPackage()
+
+	if len(config.IncludePackages) > 0 {
+		migrationMap = migrationMap.FilterPackage(config.IncludePackages)
+	}
+
+	migrationMap = migrationMap.SortAndConnect()
+
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"Package", "Migration", "Applied At", "Current"})
+
+	for pkgName, migrations := range migrationMap {
+		currentVersion, err := db.CurrentVersion(ctx, pkgName)
+		if err != nil {
+			return err
+		}
+
+		for _, migration := range migrations {
+			record, err := db.FindMigration(migration.Version)
+			if err != nil {
+				return err
+			}
+
+			t.AppendRow(table.Row{
+				migration.Package, migration.Source, formatAppliedAt(record), currentVersionMark(migration.Version, currentVersion),
+			})
+		}
+
+		t.AppendSeparator()
+		_ = currentVersion
+	}
+
+	// t.AppendFooter(table.Row{"", "", "Total", 10000})
+	t.Render()
 
 	return nil
 }
 
-func printMigrationStatus(db *rockhopper.DB, migration *rockhopper.Migration) error {
-	row, err := db.FindMigration(migration.Version)
-	if err != nil {
-		return err
+func debugMigrations(slice rockhopper.MigrationSlice) {
+	for _, m := range slice {
+		log.Debugf("loaded migration: %s %d <- %s", m.Package, m.Version, m.Source)
 	}
+}
 
-	var appliedAt string
+func currentVersionMark(migrationVersion, currentVersion int64) string {
+	if migrationVersion == currentVersion {
+		return "*"
+	}
+	return "-"
+}
 
+func formatAppliedAt(row *rockhopper.MigrationRecord) string {
+	var appliedAt = "pending"
 	if row != nil && row.IsApplied {
 		appliedAt = row.Time.Format(time.ANSIC)
-	} else {
-		appliedAt = "Pending"
 	}
 
-	log.Printf("    %-24s -- %v\n", appliedAt, migration.Source)
-	return nil
+	return appliedAt
 }

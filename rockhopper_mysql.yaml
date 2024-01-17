@@ -12,4 +12,14 @@ dsn: "root:root@tcp(localhost:3306)/bbgo?parseTime=true"
 
 # tcp connection to mysql without password
 # dsn: "root@tcp(localhost:3306)/bbgo_dev?parseTime=true"
-migrationsDir: migrations/mysql
+
+# optional:
+# migrationsDir: migrations/mysql
+
+migrationsDirs:
+- migrations/mysql/app1
+- migrations/mysql/app2
+
+includePackages:
+- app1
+- app2

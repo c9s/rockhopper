@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/x-cray/logrus-prefixed-formatter"
@@ -50,7 +50,7 @@ func init() {
 
 	// Once the flags are defined, we can bind config keys with flags.
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
-		log.WithError(err).Errorf("failed to bind persistent flags. please check the persistent flags settings.")
+		logrus.WithError(err).Errorf("failed to bind persistent flags. please check the persistent flags settings.")
 	}
 
 	viper.SetEnvPrefix("ROCKHOPPER_")
@@ -60,14 +60,14 @@ func init() {
 	viper.AutomaticEnv()
 
 	if viper.GetBool("DEBUG") {
-		log.SetLevel(log.DebugLevel)
+		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	log.SetFormatter(&prefixed.TextFormatter{})
+	logrus.SetFormatter(&prefixed.TextFormatter{})
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.WithError(err).Fatalf("cannot execute command")
+		logrus.WithError(err).Fatalf("cannot execute command")
 	}
 }

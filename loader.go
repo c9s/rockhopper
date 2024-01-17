@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -36,47 +35,6 @@ type MigrationRecord struct {
 }
 
 type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
-
-var registeredGoMigrations map[int64]*Migration
-
-// AddMigration adds a migration.
-func AddMigration(up, down TransactionHandler) {
-	pc, filename, _, _ := runtime.Caller(1)
-
-	funcName := runtime.FuncForPC(pc).Name()
-	lastSlash := strings.LastIndexByte(funcName, '/')
-	if lastSlash < 0 {
-		lastSlash = 0
-	}
-	lastDot := strings.LastIndexByte(funcName[lastSlash:], '.') + lastSlash
-	packageName := funcName[:lastDot]
-	AddNamedMigration(packageName, filename, up, down)
-}
-
-// AddNamedMigration : Add a named migration.
-func AddNamedMigration(packageName, filename string, up, down TransactionHandler) {
-	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[int64]*Migration)
-	}
-
-	v, _ := FileNumericComponent(filename)
-
-	migration := &Migration{
-		Package:    packageName,
-		Registered: true,
-
-		Version: v,
-		UpFn:    up,
-		DownFn:  down,
-		Source:  filename,
-		UseTx:   true,
-	}
-
-	if existing, ok := registeredGoMigrations[v]; ok {
-		panic(fmt.Sprintf("failed to add migration %q: version conflicts with %q", filename, existing.Source))
-	}
-	registeredGoMigrations[v] = migration
-}
 
 // FileNumericComponent looks for migration scripts with names in the form:
 // XXX_descriptivename.ext where XXX specifies the version number
@@ -164,7 +122,7 @@ type SqlMigrationLoader struct {
 
 func NewSqlMigrationLoader(config *Config) *SqlMigrationLoader {
 	defaultPkgName := config.Package
-	if len(defaultPkgName) == 0 {
+	if defaultPkgName == "" {
 		defaultPkgName = DefaultPackageName
 	}
 
@@ -190,7 +148,7 @@ func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
 		all = append(all, slice...)
 	}
 
-	return all.SortAndConnect(), nil
+	return all, nil
 }
 
 // LoadDir returns all the valid looking migration scripts in the
@@ -200,7 +158,7 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 		return nil, fmt.Errorf("%s directory does not exists", dir)
 	}
 
-	var migrations = MigrationSlice{}
+	var migrations MigrationSlice
 
 	// SQL migration files.
 	files, err := filepath.Glob(dir + "/**.sql")
@@ -209,7 +167,7 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 	}
 
 	defaultPkgName := loader.defaultPackage
-	if len(defaultPkgName) == 0 {
+	if defaultPkgName == "" {
 		defaultPkgName = DefaultPackageName
 	}
 
@@ -260,6 +218,9 @@ func (m *Migration) readSource() error {
 	m.UseTx = chunk.UseTx
 	m.UpStatements = chunk.UpStmts
 	m.DownStatements = chunk.DownStmts
-	m.Package = chunk.Package
+
+	if chunk.Package != "" {
+		m.Package = chunk.Package
+	}
 	return nil
 }
