@@ -57,7 +57,7 @@ func (m *Migration) Down(ctx context.Context, db *DB) error {
 	return m.run(ctx, db, DirectionDown)
 }
 
-type processorFunc func(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error
+type statementExecutorFunc func(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error
 
 func withoutTransaction(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error {
 	for _, cb := range callbacks {
@@ -84,7 +84,7 @@ func withTransaction(ctx context.Context, db *sql.DB, callbacks ...TransactionHa
 	return tx.Commit()
 }
 
-func (m *Migration) getProcessor() processorFunc {
+func (m *Migration) getStmtExecutor() statementExecutorFunc {
 	if m.UseTx {
 		return withTransaction
 	}
@@ -99,8 +99,8 @@ func (m *Migration) runUp(ctx context.Context, db *DB) error {
 		return db.insertVersion(ctx, db.DB, m.Package, m.Version, true)
 	}
 
-	var processor = m.getProcessor()
-	return processor(ctx, db.DB, fn, finalizer)
+	var executor = m.getStmtExecutor()
+	return executor(ctx, db.DB, fn, finalizer)
 }
 
 func (m *Migration) runDown(ctx context.Context, db *DB) error {
@@ -111,8 +111,8 @@ func (m *Migration) runDown(ctx context.Context, db *DB) error {
 		return db.deleteVersion(ctx, db.DB, m.Package, m.Version)
 	}
 
-	var processor = m.getProcessor()
-	return processor(ctx, db.DB, fn, finalizer)
+	var executor = m.getStmtExecutor()
+	return executor(ctx, db.DB, fn, finalizer)
 }
 
 func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error {
