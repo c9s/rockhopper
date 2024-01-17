@@ -113,8 +113,20 @@ func status(cmd *cobra.Command, args []string) error {
 func debugMigrations(slice rockhopper.MigrationSlice) {
 	log.Debugf("loaded %d migrations", len(slice))
 	for i, m := range slice {
-		log.Debugf("%d) loaded migration: %s %d <- %s", i+1, m.Package, m.Version, m.Source)
+		log.Debugf("%d) loaded migration: %s %d <- %s (%d <= %d => %d)", i+1, m.Package, m.Version, m.Source,
+			getVersion(m.Previous),
+			m.Version,
+			getVersion(m.Next),
+		)
 	}
+}
+
+func getVersion(m *rockhopper.Migration) int64 {
+	if m != nil {
+		return m.Version
+	}
+
+	return 0
 }
 
 func currentVersionMark(migrationVersion, currentVersion int64) string {

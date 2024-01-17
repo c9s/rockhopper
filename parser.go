@@ -58,6 +58,8 @@ type Statement struct {
 	Direction Direction     `json:"direction" yaml:"direction"`
 	SQL       string        `json:"sql" yaml:"sql"`
 	Duration  time.Duration `json:"duration" yaml:"duration"`
+	Line      int           `json:"line"`
+	File      string        `json:"file"`
 }
 
 type MigrationScriptChunk struct {

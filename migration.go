@@ -5,10 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"regexp"
 	"sort"
-	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
@@ -122,32 +121,65 @@ func (m *Migration) runDown(ctx context.Context, db *DB) error {
 	return executor(ctx, db.DB, fn, finalizer)
 }
 
-var (
-	matchSQLComments = regexp.MustCompile(`(?m)^--.*$[\r\n]*`)
-	matchEmptyEOL    = regexp.MustCompile(`(?m)^$[\r\n]*`) // TODO: Duplicate
-)
+type statementExecution func(ctx context.Context, e SQLExecutor, stmt *Statement) error
 
-// cleanSQL removes the SQL comments
-func cleanSQL(s string) string {
-	s = matchSQLComments.ReplaceAllString(s, "")
-	return strings.TrimSpace(matchEmptyEOL.ReplaceAllString(s, ""))
+func withStatementDebug(next statementExecution) statementExecution {
+	return func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+		log.Debug(cleanSQL(stmt.SQL))
+		return next(ctx, e, stmt)
+	}
+}
+
+func withStatementPrettyLog(next statementExecution) statementExecution {
+	return func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+		fmt.Print(text.Colors{text.FgGreen}.Sprint("EXECUTING: "))
+		fmt.Print(text.Colors{text.FgHiWhite}.Sprint(previewSQL(stmt.SQL)), " ")
+
+		err := next(ctx, e, stmt)
+
+		fmt.Printf("[  %6s  ]", text.Colors{text.FgHiGreen}.Sprintf("OK"))
+		fmt.Printf(" ---- %s", text.Colors{text.FgWhite, text.BgBlack}.Sprintf(stmt.Duration.String()))
+		fmt.Print("\n")
+		return err
+	}
+}
+
+func withStatementProfile(next statementExecution) statementExecution {
+	return func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+		p := startProfile(fmt.Sprintf("stmt: %x", stmt))
+		err := next(ctx, e, stmt)
+		p.Stop()
+		log.Debugf("query done, duration: %s", p.String())
+		stmt.Duration = p.duration
+		return err
+	}
+}
+
+func executeStatement(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+	var fn statementExecution = func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+		if _, err := e.ExecContext(ctx, stmt.SQL); err != nil {
+			return errors.Wrapf(err, "failed to execute SQL query %q, error %s", cleanSQL(stmt.SQL), err.Error())
+		}
+
+		return nil
+	}
+
+	fn = withStatementProfile(fn)
+	if log.GetLevel() == log.DebugLevel {
+		fn = withStatementDebug(fn)
+	} else {
+		fn = withStatementPrettyLog(fn)
+	}
+
+	return fn(ctx, e, stmt)
 }
 
 // executeStatements executes the given statements sequentially
 func executeStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {
-	for idx, stmt := range stmts {
-		log.Debug(cleanSQL(stmt.SQL))
-
-		p := startProfile(fmt.Sprintf("%d", idx))
-		if _, err := e.ExecContext(ctx, stmt.SQL); err != nil {
-			return errors.Wrapf(err, "failed to execute SQL query %q, error %s", cleanSQL(stmt.SQL), err.Error())
+	for _, stmt := range stmts {
+		if err := executeStatement(ctx, e, &stmt); err != nil {
+			return err
 		}
-		p.Stop()
-
-		log.Debugf("duration: %s", p.String())
-
-		// update duration into the statement object
-		stmts[idx].Duration = p.duration
 	}
 
 	return nil
@@ -225,14 +257,17 @@ func (ms MigrationSlice) Sort() MigrationSlice {
 func (ms MigrationSlice) Connect() MigrationSlice {
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
-	for i, m := range ms {
-		var prev *Migration = nil
+	for i := 0; i < len(ms); i++ {
+		m := ms[i]
+
+		if i < len(ms)-1 {
+			m.Next = ms[i+1]
+		}
 		if i > 0 {
-			prev = ms[i-1]
-			ms[i-1].Next = m
+			m.Previous = ms[i-1]
 		}
 
-		ms[i].Previous = prev
+		ms[i] = m
 	}
 
 	return ms

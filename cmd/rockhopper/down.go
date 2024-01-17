@@ -11,6 +11,7 @@ import (
 
 func init() {
 	DownCmd.Flags().Int64("to", 0, "downgrade to a specific version")
+	DownCmd.Flags().Bool("all", false, "downgrade all")
 	DownCmd.Flags().Int("steps", 0, "downgrade by steps")
 	rootCmd.AddCommand(DownCmd)
 }
@@ -33,6 +34,11 @@ func down(cmd *cobra.Command, args []string) error {
 	}
 
 	to, err := cmd.Flags().GetInt64("to")
+	if err != nil {
+		return err
+	}
+
+	downgradeAll, err := cmd.Flags().GetBool("all")
 	if err != nil {
 		return err
 	}
@@ -66,6 +72,29 @@ func down(cmd *cobra.Command, args []string) error {
 	}
 
 	debugMigrations(allMigrations)
+
+	if downgradeAll {
+		migrationMap := allMigrations.MapByPackage()
+
+		if len(config.IncludePackages) > 0 {
+			migrationMap = migrationMap.FilterPackage(config.IncludePackages)
+		}
+
+		migrationMap = migrationMap.SortAndConnect()
+
+		for _, migrations := range migrationMap {
+			_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, migrations)
+			if err != nil {
+				return err
+			}
+
+			return rockhopper.Down(ctx, db, lastAppliedMigration, 0, func(m *rockhopper.Migration) {
+				log.Infof("migration %v is applied for downgrade", m.Version)
+			})
+		}
+	
+		return nil
+	}
 
 	allMigrations = allMigrations.SortAndConnect()
 
