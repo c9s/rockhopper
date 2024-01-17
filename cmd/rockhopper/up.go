@@ -91,14 +91,21 @@ func up(cmd *cobra.Command, args []string) error {
 		}
 
 		if steps > 0 {
-			return rockhopper.UpBySteps(ctx, db, startMigration, steps, func(m *rockhopper.Migration) {
+			err = rockhopper.UpBySteps(ctx, db, startMigration, steps, func(m *rockhopper.Migration) {
 				// log.Infof("migration %v is applied", m.Version)
 			})
+			if err != nil {
+				return err
+			}
+		} else {
+			err = rockhopper.Up(ctx, db, startMigration, to, func(m *rockhopper.Migration) {
+				// log.Infof("migration %d is applied", m.Version)
+			})
+			if err != nil {
+				return err
+			}
 		}
 
-		return rockhopper.Up(ctx, db, startMigration, to, func(m *rockhopper.Migration) {
-			// log.Infof("migration %d is applied", m.Version)
-		})
 	}
 
 	return nil

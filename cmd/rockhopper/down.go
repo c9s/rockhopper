@@ -88,11 +88,14 @@ func down(cmd *cobra.Command, args []string) error {
 				return err
 			}
 
-			return rockhopper.Down(ctx, db, lastAppliedMigration, 0, func(m *rockhopper.Migration) {
+			err = rockhopper.Down(ctx, db, lastAppliedMigration, 0, func(m *rockhopper.Migration) {
 				log.Infof("migration %v is applied for downgrade", m.Version)
 			})
+			if err != nil {
+				return err
+			}
 		}
-	
+
 		return nil
 	}
 
