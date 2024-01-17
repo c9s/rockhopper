@@ -102,10 +102,9 @@ func status(cmd *cobra.Command, args []string) error {
 		}
 
 		t.AppendSeparator()
-		_ = currentVersion
 	}
 
-	// t.AppendFooter(table.Row{"", "", "Total", 10000})
+	t.AppendFooter(table.Row{"", "", "Migrations", len(allMigrations)})
 	t.Render()
 
 	return nil
