@@ -16,3 +16,11 @@ func (p *Profile) Stop() {
 	p.endTime = time.Now()
 	p.duration = p.endTime.Sub(p.startTime)
 }
+
+func (p *Profile) String() string {
+	if p.duration > 0 {
+		return p.duration.String()
+	}
+
+	return p.startTime.String()
+}

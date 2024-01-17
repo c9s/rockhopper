@@ -51,12 +51,16 @@ func FileNumericComponent(name string) (int64, error) {
 		return 0, errors.New("no separator found")
 	}
 
-	n, e := strconv.ParseInt(base[:idx], 10, 64)
-	if e == nil && n <= 0 {
+	n, err := strconv.ParseInt(base[:idx], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	if n <= 0 {
 		return 0, errors.New("migration IDs must be greater than zero")
 	}
 
-	return n, e
+	return n, nil
 }
 
 type MigrationLoader interface{}

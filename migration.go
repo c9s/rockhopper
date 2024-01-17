@@ -93,7 +93,7 @@ func (m *Migration) getStmtExecutor() statementExecutorFunc {
 
 func (m *Migration) runUp(ctx context.Context, db *DB) error {
 	fn := withDefault[TransactionHandler](m.UpFn, func(ctx context.Context, exec SQLExecutor) error {
-		return runStatements(ctx, exec, m.UpStatements)
+		return executeStatements(ctx, exec, m.UpStatements)
 	})
 	finalizer := func(ctx context.Context, exec SQLExecutor) error {
 		return db.insertVersion(ctx, db.DB, m.Package, m.Version, true)
@@ -105,7 +105,7 @@ func (m *Migration) runUp(ctx context.Context, db *DB) error {
 
 func (m *Migration) runDown(ctx context.Context, db *DB) error {
 	fn := withDefault[TransactionHandler](m.DownFn, func(ctx context.Context, exec SQLExecutor) error {
-		return runStatements(ctx, exec, m.DownStatements)
+		return executeStatements(ctx, exec, m.DownStatements)
 	})
 	finalizer := func(ctx context.Context, exec SQLExecutor) error {
 		return db.deleteVersion(ctx, db.DB, m.Package, m.Version)
@@ -134,17 +134,27 @@ var (
 	matchEmptyEOL    = regexp.MustCompile(`(?m)^$[\r\n]*`) // TODO: Duplicate
 )
 
+// cleanSQL removes the SQL comments
 func cleanSQL(s string) string {
 	s = matchSQLComments.ReplaceAllString(s, "")
 	return strings.TrimSpace(matchEmptyEOL.ReplaceAllString(s, ""))
 }
 
-func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {
-	for _, stmt := range stmts {
-		log.Infof("executing statement: %s", cleanSQL(stmt.SQL))
+// executeStatements executes the given statements sequentially
+func executeStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {
+	for idx, stmt := range stmts {
+		log.Debug(cleanSQL(stmt.SQL))
+
+		p := profile(fmt.Sprintf("%d", idx))
 		if _, err := e.ExecContext(ctx, stmt.SQL); err != nil {
 			return errors.Wrapf(err, "failed to execute SQL query %q, error %s", cleanSQL(stmt.SQL), err.Error())
 		}
+		p.Stop()
+
+		log.Debugf("duration: %s", p.String())
+
+		// update duration into the statement object
+		stmts[idx].Duration = p.duration
 	}
 
 	return nil
