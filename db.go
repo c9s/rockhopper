@@ -380,7 +380,11 @@ func sliceContains(a []string, b string) bool {
 func rollbackAndLogErr(originErr error, txn *sql.Tx, msg string, args ...any) error {
 	if err := txn.Rollback(); err != nil {
 		log.WithError(err).Errorf("unable to rollback transaction")
-		return errors.Wrapf(originErr, msg, args...)
+		if len(msg) > 0 {
+			return errors.Wrapf(originErr, msg, args...)
+		}
+
+		return errors.Wrapf(originErr, err.Error())
 	}
 
 	return originErr

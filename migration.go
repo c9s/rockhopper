@@ -57,85 +57,76 @@ func (m *Migration) Down(ctx context.Context, db *DB) error {
 	return m.run(ctx, db, DirectionDown)
 }
 
-func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error {
-	var err error
-	var tx *sql.Tx = nil
-	var rollback = func(err error) {}
-	var executor SQLExecutor = db
+type processorFunc func(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error
 
-	if m.UseTx {
-		log.Debug("migration transaction is enabled, starting transaction...")
-
-		tx, err = db.BeginTx(ctx, nil)
-		if err != nil {
-			return errors.Wrap(err, "failed to begin transaction")
-		}
-
-		executor = tx
-		rollback = func(err error) {
-			if err != nil {
-				log.WithError(err).Errorf("error occured, rolling back transaction for version %d (source %s)...", m.Version, m.Source)
-			}
-
-			if err2 := tx.Rollback(); err2 != nil {
-				log.WithError(err2).Errorf("rollback error, can not rollback for version %d (source %s)", m.Version, m.Source)
-			}
-		}
-	} else {
-		log.Debugf("transaction is disabled in migration version: %d", m.Version)
-	}
-
-	switch direction {
-
-	case DirectionUp:
-		log.Infof("upgrading to version %d...", m.Version)
-		if m.UpFn != nil {
-			if err := m.UpFn(ctx, executor); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to upgrade version %d", m.Version)
-			}
-		} else {
-			if err := runStatements(ctx, executor, m.UpStatements); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to upgrade version %d", m.Version)
-			}
-		}
-
-		if err := db.insertVersion(ctx, executor, DefaultPackageName, m.Version, true); err != nil {
-			rollback(err)
-			return errors.Wrap(err, "failed to insert new migration version")
-		}
-		log.Infof("upgraded to version %d successfully", m.Version)
-
-	case DirectionDown:
-		if m.DownFn != nil {
-			if err := m.DownFn(ctx, executor); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to downgrade version %d", m.Version)
-			}
-		} else {
-			if err := runStatements(ctx, executor, m.DownStatements); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to downgrade version %d", m.Version)
-			}
-		}
-
-		if err := db.deleteVersion(ctx, executor, "main", m.Version); err != nil {
-			rollback(err)
-			return errors.Wrapf(err, "failed to delete migration version %d", m.Version)
-		}
-
-		log.Infof("downgraded from version %d successfully", m.Version)
-	}
-
-	if m.UseTx && tx != nil {
-		log.Debug("committing transaction...")
-		if err := tx.Commit(); err != nil {
-			return errors.Wrapf(err, "failed to commit transaction for version %d (source %s)", m.Version, m.Source)
+func withoutTransaction(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error {
+	for _, cb := range callbacks {
+		if err2 := cb(ctx, db); err2 != nil {
+			return err2
 		}
 	}
 
 	return nil
+}
+
+func withTransaction(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	for _, cb := range callbacks {
+		if err2 := cb(ctx, tx); err2 != nil {
+			return rollbackAndLogErr(err, tx, "")
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (m *Migration) getProcessor() processorFunc {
+	if m.UseTx {
+		return withTransaction
+	}
+	return withoutTransaction
+}
+
+func (m *Migration) runUp(ctx context.Context, db *DB) error {
+	fn := withDefault[TransactionHandler](m.UpFn, func(ctx context.Context, exec SQLExecutor) error {
+		return runStatements(ctx, exec, m.UpStatements)
+	})
+	finalizer := func(ctx context.Context, exec SQLExecutor) error {
+		return db.insertVersion(ctx, db.DB, m.Package, m.Version, true)
+	}
+
+	var processor = m.getProcessor()
+	return processor(ctx, db.DB, fn, finalizer)
+}
+
+func (m *Migration) runDown(ctx context.Context, db *DB) error {
+	fn := withDefault[TransactionHandler](m.DownFn, func(ctx context.Context, exec SQLExecutor) error {
+		return runStatements(ctx, exec, m.DownStatements)
+	})
+	finalizer := func(ctx context.Context, exec SQLExecutor) error {
+		return db.deleteVersion(ctx, db.DB, m.Package, m.Version)
+	}
+
+	var processor = m.getProcessor()
+	return processor(ctx, db.DB, fn, finalizer)
+}
+
+func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error {
+	switch direction {
+
+	case DirectionUp:
+		return m.runUp(ctx, db)
+
+	case DirectionDown:
+		return m.runDown(ctx, db)
+
+	default:
+		return fmt.Errorf("unexpected direction: %v", direction)
+	}
 }
 
 var (
@@ -246,4 +237,12 @@ func (ms MigrationSlice) Connect() MigrationSlice {
 
 func (ms MigrationSlice) SortAndConnect() MigrationSlice {
 	return ms.Sort().Connect()
+}
+
+func withDefault[T any](txHandler, defaultTxHandler T) T {
+	if txHandler != nil {
+		return txHandler
+	}
+
+	return defaultTxHandler
 }
