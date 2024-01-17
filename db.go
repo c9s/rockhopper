@@ -178,7 +178,8 @@ func (db *DB) LoadMigration(ctx context.Context, m *Migration) (*Migration, erro
 		return nil, convertNoRowsErrToNil(err)
 	}
 
-	var err = row.Scan(&record.Time, &record.IsApplied, &record.Time)
+	var id int64
+	var err = row.Scan(&id, &record.Time, &record.IsApplied)
 	if err != nil {
 		return nil, convertNoRowsErrToNil(err)
 	}
@@ -427,10 +428,8 @@ func (db *DB) FindLastAppliedMigration(
 			return -1, nil, err
 		}
 
-		if m.Record != nil {
-			if m.Record.IsApplied {
-				return i, m, nil
-			}
+		if m != nil && m.Record != nil && m.Record.IsApplied {
+			return i, m, nil
 		}
 	}
 

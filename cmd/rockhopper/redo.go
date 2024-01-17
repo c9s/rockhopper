@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +24,9 @@ var RedoCmd = &cobra.Command{
 }
 
 func redo(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	db, err := rockhopper.OpenWithConfig(config)
 	if err != nil {
 		return err
@@ -30,19 +34,30 @@ func redo(cmd *cobra.Command, args []string) error {
 
 	defer db.Close()
 
-	loader := &rockhopper.SqlMigrationLoader{}
-	migrations, err := loader.Load(config.MigrationsDir)
+	if err := db.Touch(ctx); err != nil {
+		return err
+	}
+
+	loader := rockhopper.NewSqlMigrationLoader(config)
+
+	migrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	if len(migrations) == 0 {
+		log.Infof("no migrations found")
+		return nil
+	}
 
-	currentVersion, err := db.CurrentVersion(ctx, rockhopper.DefaultPackageName)
+	_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, migrations)
 	if err != nil {
 		return err
 	}
 
-	return rockhopper.Redo(ctx, db, currentVersion, migrations)
+	if lastAppliedMigration == nil {
+		return errors.New("no migration has been applied yet")
+	}
+
+	return rockhopper.Redo(ctx, db, lastAppliedMigration)
 }

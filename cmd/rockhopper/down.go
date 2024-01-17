@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -24,6 +25,9 @@ var DownCmd = &cobra.Command{
 }
 
 func down(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if err := checkConfig(config); err != nil {
 		return err
 	}
@@ -45,9 +49,6 @@ func down(cmd *cobra.Command, args []string) error {
 
 	defer db.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	if err := db.Touch(ctx); err != nil {
 		return err
 	}
@@ -64,16 +65,18 @@ func down(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	log.Infof("loaded %d migrations", len(allMigrations))
+	debugMigrations(allMigrations)
 
 	allMigrations = allMigrations.SortAndConnect()
 
-	idx, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, allMigrations)
+	_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, allMigrations)
 	if err != nil {
 		return err
 	}
 
-	_ = idx
+	if lastAppliedMigration == nil {
+		return errors.New("last applied migration not found")
+	}
 
 	if to > 0 {
 		return rockhopper.Down(ctx, db, lastAppliedMigration, to, func(m *rockhopper.Migration) {

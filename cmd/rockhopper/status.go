@@ -38,6 +38,9 @@ func checkConfig(config *rockhopper.Config) error {
 }
 
 func status(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if err := checkConfig(config); err != nil {
 		return err
 	}
@@ -49,11 +52,7 @@ func status(cmd *cobra.Command, args []string) error {
 
 	defer db.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	_, err = db.CurrentVersion(ctx, rockhopper.DefaultPackageName)
-	if err != nil {
+	if err := db.Touch(ctx); err != nil {
 		return err
 	}
 
@@ -113,8 +112,9 @@ func status(cmd *cobra.Command, args []string) error {
 }
 
 func debugMigrations(slice rockhopper.MigrationSlice) {
-	for _, m := range slice {
-		log.Debugf("loaded migration: %s %d <- %s", m.Package, m.Version, m.Source)
+	log.Debugf("loaded %d migrations", len(slice))
+	for i, m := range slice {
+		log.Debugf("%d) loaded migration: %s %d <- %s", i+1, m.Package, m.Version, m.Source)
 	}
 }
 

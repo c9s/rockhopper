@@ -27,6 +27,9 @@ var UpCmd = &cobra.Command{
 }
 
 func up(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if err := checkConfig(config); err != nil {
 		return err
 	}
@@ -41,15 +44,16 @@ func up(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	db, err := rockhopper.OpenWithConfig(config)
 	if err != nil {
 		return err
 	}
 
 	defer db.Close()
+
+	if err := db.Touch(ctx); err != nil {
+		return err
+	}
 
 	loader := rockhopper.NewSqlMigrationLoader(config)
 
@@ -63,7 +67,7 @@ func up(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	log.Infof("loaded %d migrations", len(allMigrations))
+	debugMigrations(allMigrations)
 
 	migrationMap := allMigrations.MapByPackage()
 

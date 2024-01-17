@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -255,10 +256,12 @@ func (ms MigrationSlice) SortAndConnect() MigrationSlice {
 	return ms.Sort().Connect()
 }
 
-func withDefault[T any](txHandler, defaultTxHandler T) T {
-	if txHandler != nil {
-		return txHandler
+func withDefault[T any](a, def T) T {
+	v := reflect.ValueOf(a)
+
+	if !v.IsNil() {
+		return a
 	}
 
-	return defaultTxHandler
+	return def
 }
