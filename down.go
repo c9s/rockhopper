@@ -24,7 +24,7 @@ func DownBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks
 
 func Down(ctx context.Context, db *DB, m *Migration, to int64, callbacks ...func(m *Migration)) error {
 	for ; m != nil; m = m.Previous {
-		if to > 0 && m.Version < to {
+		if to > 0 && m.Version <= to {
 			break
 		}
 

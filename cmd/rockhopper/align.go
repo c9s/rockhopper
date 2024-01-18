@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"errors"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -10,20 +10,28 @@ import (
 )
 
 func init() {
-	// RedoCmd.Flags().String("","","...")
-	rootCmd.AddCommand(RedoCmd)
+	rootCmd.AddCommand(AlignCmd)
 }
 
-var RedoCmd = &cobra.Command{
-	Use:   "redo",
-	Short: "redo migration",
+var AlignCmd = &cobra.Command{
+	Use:   "align",
+	Short: "align migration version",
+
+	Args: cobra.ExactArgs(2),
 
 	// SilenceUsage is an option to silence usage when an error occurs.
 	SilenceUsage: true,
-	RunE:         redo,
+	RunE:         align,
 }
 
-func redo(cmd *cobra.Command, args []string) error {
+func align(cmd *cobra.Command, args []string) error {
+	packageName := args[0]
+	versionStr := args[1]
+	versionID, err := strconv.ParseInt(versionStr, 10, 64)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -50,14 +58,7 @@ func redo(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, migrations)
-	if err != nil {
-		return err
-	}
-
-	if lastAppliedMigration == nil {
-		return errors.New("no migration has been applied yet")
-	}
-
-	return rockhopper.Redo(ctx, db, lastAppliedMigration)
+	migrations = migrations.FilterPackage([]string{packageName})
+	migrations = migrations.SortAndConnect()
+	return rockhopper.Align(ctx, db, versionID, migrations)
 }

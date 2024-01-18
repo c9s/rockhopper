@@ -126,7 +126,14 @@ type statementExecution func(ctx context.Context, e SQLExecutor, stmt *Statement
 func withStatementDebug(next statementExecution) statementExecution {
 	return func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
 		log.Debug(cleanSQL(stmt.SQL))
-		return next(ctx, e, stmt)
+
+		err := next(ctx, e, stmt)
+		if err != nil {
+			log.Error(err.Error())
+			log.Error(stmt.SQL)
+		}
+
+		return err
 	}
 }
 
@@ -137,9 +144,17 @@ func withStatementPrettyLog(next statementExecution) statementExecution {
 
 		err := next(ctx, e, stmt)
 
-		fmt.Printf("[  %6s  ]", text.Colors{text.FgHiGreen}.Sprintf("OK"))
-		fmt.Printf(" ---- %s", text.Colors{text.FgWhite, text.BgBlack}.Sprintf(stmt.Duration.String()))
-		fmt.Print("\n")
+		if err != nil {
+			fmt.Printf("[  %6s  ]", text.Colors{text.FgHiRed}.Sprintf("FAILED"))
+			fmt.Print("\n")
+			log.Error(stmt.SQL)
+			log.Error(err.Error())
+		} else {
+			fmt.Printf("[  %6s  ]", text.Colors{text.FgHiGreen}.Sprintf("OK"))
+			fmt.Printf(" ---- %s", text.Colors{text.FgWhite, text.BgBlack}.Sprintf(stmt.Duration.String()))
+			fmt.Print("\n")
+		}
+
 		return err
 	}
 }

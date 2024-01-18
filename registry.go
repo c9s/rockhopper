@@ -11,6 +11,8 @@ type registryKey struct {
 	Version int64
 }
 
+// registeredGoMigrations stores the global registered migrations
+// applications may register their compiledd migration scrips into this map
 var registeredGoMigrations = map[registryKey]*Migration{}
 
 // AddMigration registers a migration to the global map

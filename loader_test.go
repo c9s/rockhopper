@@ -7,21 +7,29 @@ import (
 )
 
 func TestFileNumericComponent(t *testing.T) {
-
 	var testCases = []struct {
+		Name        string
 		Filename    string
 		WantVersion int64
 	}{
 		{
+			Name:        "with package name",
 			Filename:    "pkg/testing/migrations/app1_20240116231445_create_table_1.go",
+			WantVersion: 20240116231445,
+		},
+		{
+			Name:        "legacy",
+			Filename:    "pkg/testing/migrations/20240116231445_create_table_1.go",
 			WantVersion: 20240116231445,
 		},
 	}
 
 	for _, testCase := range testCases {
-		version, err := FileNumericComponent(testCase.Filename)
-		assert.NoError(t, err)
-		assert.Equal(t, testCase.WantVersion, version)
+		t.Run(testCase.Name, func(t *testing.T) {
+			version, err := FileNumericComponent(testCase.Filename)
+			assert.NoError(t, err)
+			assert.Equal(t, testCase.WantVersion, version)
+		})
 	}
 }
 

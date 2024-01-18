@@ -39,9 +39,20 @@ type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
 
 var migrationVersionRegExp = regexp.MustCompile("_?(\\d{14,})_")
 
+func parseVersionID(name string) (string, error) {
+	matches := migrationVersionRegExp.FindStringSubmatch(name)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("version number not found in filename: %s", name)
+	}
+
+	return matches[1], nil
+}
+
 // FileNumericComponent looks for migration scripts with names in the form:
-// XXX_descriptivename.ext where XXX specifies the version number
+// {VersionIdTimestampFormat}_descriptivename.ext where XXX specifies the version number
 // and ext specifies the type of migration
+//
+// See VersionIdTimestampFormat
 func FileNumericComponent(name string) (int64, error) {
 	base := filepath.Base(name)
 
@@ -49,12 +60,12 @@ func FileNumericComponent(name string) (int64, error) {
 		return 0, errors.New("not a recognized migration file type")
 	}
 
-	matches := migrationVersionRegExp.FindStringSubmatch(base)
-	if len(matches) < 2 {
-		return 0, fmt.Errorf("version number not found in filename: %s", name)
+	versionID, err := parseVersionID(base)
+	if err != nil {
+		return 0, err
 	}
 
-	n, err := strconv.ParseInt(matches[1], 10, 64)
+	n, err := strconv.ParseInt(versionID, 10, 64)
 	if err != nil {
 		return 0, err
 	}
@@ -147,6 +158,7 @@ func (loader *SqlMigrationLoader) SetDefaultPackage(pkgName string) {
 
 // Load returns all the valid looking migration scripts in the
 // migrations folders and go func registry, and key them by version.
+// Load method always returns a sorted migration slice
 func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
 	var all MigrationSlice
 	for _, d := range dirs {
@@ -182,7 +194,7 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 	}
 
 	for _, file := range files {
-		v, err := FileNumericComponent(file)
+		versionID, err := FileNumericComponent(file)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +202,7 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 		name := SqlMigrationFilenamePattern.ReplaceAllString(filepath.Base(file), "$2")
 		migration := &Migration{
 			Package: defaultPkgName,
-			Version: v,
+			Version: versionID,
 			Name:    name,
 			Source:  file,
 		}
