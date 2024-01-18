@@ -25,9 +25,21 @@ func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks .
 }
 
 func descMigration(action string, m *Migration) {
+	char := "\u21E1"
+	colors := text.Colors{text.FgBlack, text.BgHiGreen}
+	switch action {
+	case "downgrading":
+		colors = text.Colors{text.FgBlack, text.BgHiCyan}
+		char = "\u21E3"
+	case "upgrading":
+		char = "\u21E1"
+		colors = text.Colors{text.FgBlack, text.BgHiGreen}
+	}
+
 	fmt.Printf(
-		text.Colors{text.FgBlack, text.BgHiGreen}.Sprintf(
-			"%s %s >> % 28d (%d upgrade statements / %d downgrade statements)",
+		colors.Sprintf(
+			"%2s %-12s %-6s >> %-28d (%d upgrade statements / %d downgrade statements)",
+			char,
 			strings.ToUpper(action),
 			m.Package,
 			m.Version,
