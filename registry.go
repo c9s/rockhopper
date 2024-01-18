@@ -6,7 +6,12 @@ import (
 	"strings"
 )
 
-var registeredGoMigrations map[int64]*Migration
+type registryKey struct {
+	Package string
+	Version int64
+}
+
+var registeredGoMigrations = map[registryKey]*Migration{}
 
 // AddMigration registers a migration to the global map
 func AddMigration(up, down TransactionHandler) {
@@ -17,6 +22,7 @@ func AddMigration(up, down TransactionHandler) {
 	if lastSlash < 0 {
 		lastSlash = 0
 	}
+
 	lastDot := strings.LastIndexByte(funcName[lastSlash:], '.') + lastSlash
 	packageName := funcName[:lastDot]
 	AddNamedMigration(packageName, filename, up, down)
@@ -25,7 +31,7 @@ func AddMigration(up, down TransactionHandler) {
 // AddNamedMigration registers a migration to the global map with a given name
 func AddNamedMigration(packageName, filename string, up, down TransactionHandler) {
 	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[int64]*Migration)
+		registeredGoMigrations = make(map[registryKey]*Migration)
 	}
 
 	v, _ := FileNumericComponent(filename)
@@ -41,8 +47,10 @@ func AddNamedMigration(packageName, filename string, up, down TransactionHandler
 		UseTx:   true,
 	}
 
-	if existing, ok := registeredGoMigrations[v]; ok {
+	key := registryKey{Package: packageName, Version: v}
+	if existing, ok := registeredGoMigrations[key]; ok {
 		panic(fmt.Sprintf("failed to add migration %q: version conflicts with %q", filename, existing.Source))
 	}
-	registeredGoMigrations[v] = migration
+
+	registeredGoMigrations[key] = migration
 }

@@ -74,7 +74,7 @@ func (loader *GoMigrationLoader) Load() (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
-	return migrations.SortAndConnect(), nil
+	return migrations.Sort(), nil
 }
 
 func (loader *GoMigrationLoader) LoadByPackageSuffix(suffix string) (MigrationSlice, error) {
@@ -153,7 +153,7 @@ func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
 		all = append(all, slice...)
 	}
 
-	return all, nil
+	return all.Sort(), nil
 }
 
 // LoadDir returns all the valid looking migration scripts in the
