@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/c9s/rockhopper"
+	"github.com/c9s/rockhopper/v2"
 )
 
 func init() {

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/x-cray/logrus-prefixed-formatter"
 
-	"github.com/c9s/rockhopper"
+	"github.com/c9s/rockhopper/v2"
 )
 
 var config *rockhopper.Config
