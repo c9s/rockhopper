@@ -43,7 +43,7 @@ func TestDB_LoadMigrations(t *testing.T) {
 	err = tx.Commit()
 	assert.NoError(t, err)
 
-	err = db.insertVersion(ctx, db.DB, DefaultPackageName, 2, true)
+	err = db.insertVersion(ctx, db.DB, DefaultPackageName, "", 2, true)
 	assert.NoError(t, err)
 
 	records, err := db.LoadMigrationRecordsByPackage(ctx, DefaultPackageName)
@@ -120,7 +120,7 @@ func TestDB_LoadMigrations_Integration(t *testing.T) {
 			err = tx.Commit()
 			assert.NoError(t, err)
 
-			err = db.insertVersion(ctx, db.DB, DefaultPackageName, 2, true)
+			err = db.insertVersion(ctx, db.DB, DefaultPackageName, "", 2, true)
 			if assert.NoError(t, err) {
 				defer func() {
 					err = db.deleteVersion(ctx, db.DB, DefaultPackageName, 2)

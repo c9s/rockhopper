@@ -15,6 +15,8 @@ func (m TiDBDialect) getTableNamesSQL() string {
 func (m TiDBDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE %s (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+                package VARCHAR(128) NOT NULL DEFAULT 'main',
+            	source_file VARCHAR(255) NOT NULL DEFAULT '',
                 version_id bigint NOT NULL,
                 is_applied boolean NOT NULL,
                 tstamp timestamp NULL default now(),
@@ -23,7 +25,7 @@ func (m TiDBDialect) createVersionTableSQL(tableName string) string {
 }
 
 func (m TiDBDialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES (?, ?, ?);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES (?, ?, ?, ?)", tableName)
 }
 
 func (m TiDBDialect) selectLastVersionSQL(tableName string) string {

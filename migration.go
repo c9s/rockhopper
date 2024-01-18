@@ -102,7 +102,7 @@ func (m *Migration) runUp(ctx context.Context, db *DB) error {
 		return executeStatements(ctx, exec, m.UpStatements)
 	})
 	finalizer := func(ctx context.Context, exec SQLExecutor) error {
-		return db.insertVersion(ctx, db.DB, m.Package, m.Version, true)
+		return db.insertVersion(ctx, db.DB, m.Package, m.Source, m.Version, true)
 	}
 
 	var executor = m.getStmtExecutor()

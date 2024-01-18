@@ -157,8 +157,8 @@ func (db *DB) getTableNames(ctx context.Context) ([]string, error) {
 	return tableNames, nil
 }
 
-func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64, applied bool) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), pkgName, version, applied); err != nil {
+func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName, sourceFile string, version int64, applied bool) error {
+	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), pkgName, sourceFile, version, applied); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
 	}
 
@@ -374,7 +374,7 @@ func (db *DB) createVersionTable(ctx context.Context, tx SqlExecutor, initVersio
 		return err
 	}
 
-	return db.insertVersion(ctx, tx, CorePackageName, initVersion, true)
+	return db.insertVersion(ctx, tx, CorePackageName, "", initVersion, true)
 }
 
 func sliceContains(a []string, b string) bool {

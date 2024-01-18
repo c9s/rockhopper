@@ -15,6 +15,8 @@ func (d RedshiftDialect) getTableNamesSQL() string {
 func (d RedshiftDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE %s (
             	id INTEGER NOT NULL identity(1, 1),
+                package VARCHAR(128) NOT NULL DEFAULT 'main',
+            	source_file VARCHAR(255) NOT NULL DEFAULT '',
                 version_id BIGINT NOT NULL,
                 is_applied BOOLEAN NOT NULL,
                 tstamp TIMESTAMP NULL default sysdate,
@@ -23,7 +25,7 @@ func (d RedshiftDialect) createVersionTableSQL(tableName string) string {
 }
 
 func (d RedshiftDialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES ($1, $2, $3);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES ($1, $2, $3, $4)", tableName)
 }
 
 func (d RedshiftDialect) selectLastVersionSQL(tableName string) string {

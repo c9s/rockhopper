@@ -16,6 +16,7 @@ func (m Sqlite3Dialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 package TEXT NOT NULL DEFAULT 'main',
+            	source_file VARCHAR(255) NOT NULL DEFAULT '',
                 version_id INTEGER NOT NULL,
                 is_applied INTEGER NOT NULL,
                 tstamp TIMESTAMP DEFAULT (datetime('now'))
@@ -23,7 +24,7 @@ func (m Sqlite3Dialect) createVersionTableSQL(tableName string) string {
 }
 
 func (m Sqlite3Dialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES (?, ?, ?);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES (?, ?, ?, ?)", tableName)
 }
 
 func (m Sqlite3Dialect) selectLastVersionSQL(tableName string) string {

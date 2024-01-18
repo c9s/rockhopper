@@ -16,6 +16,8 @@ func (d PostgresDialect) getTableNamesSQL() string {
 func (d PostgresDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
             	id serial NOT NULL,
+            	package VARCHAR(128) NOT NULL DEFAULT 'main',
+            	source_file VARCHAR(255) NOT NULL DEFAULT '',
                 version_id BIGINT NOT NULL,
                 is_applied BOOLEAN NOT NULL,
                 tstamp TIMESTAMP NULL DEFAULT NOW(),
@@ -24,7 +26,7 @@ func (d PostgresDialect) createVersionTableSQL(tableName string) string {
 }
 
 func (d PostgresDialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES ($1, $2, $3);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES ($1, $2, $3, $4)", tableName)
 }
 
 func (d PostgresDialect) selectLastVersionSQL(tableName string) string {
