@@ -307,10 +307,12 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 			return rollbackAndLogErr(err, tx, "unable to alter table")
 		}
 
-		if err := execAndCheckErr(tx, ctx,
-			fmt.Sprintf(`RENAME TABLE %s TO %s`, legacyGooseTableName, TableName)); err != nil {
-			return rollbackAndLogErr(err, tx, "unable to rename table")
-		}
+		/*
+			if err := execAndCheckErr(tx, ctx,
+				fmt.Sprintf(`RENAME TABLE %s TO %s`, legacyGooseTableName, TableName)); err != nil {
+				return rollbackAndLogErr(err, tx, "unable to rename table")
+			}
+		*/
 
 	case *PostgresDialect, *RedshiftDialect:
 		if err := execAndCheckErr(tx, ctx,
@@ -318,23 +320,26 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 			return rollbackAndLogErr(err, tx, "unable to alter table")
 		}
 
-		if err := execAndCheckErr(tx, ctx,
-			fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, legacyGooseTableName, TableName)); err != nil {
-			return rollbackAndLogErr(err, tx, "unable to rename table")
-		}
+		/*
+			if err := execAndCheckErr(tx, ctx,
+				fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, legacyGooseTableName, TableName)); err != nil {
+				return rollbackAndLogErr(err, tx, "unable to rename table")
+			}
+		*/
 
 	case *Sqlite3Dialect, *SqlServerDialect:
-		if err := execAndCheckErr(tx, ctx,
-			fmt.Sprintf(`INSERT INTO %s(id, package, version_id, is_applied, tstamp) SELECT id, 'main', version_id, is_applied, tstamp FROM %s`,
-				TableName,
-				legacyGooseTableName),
-		); err != nil {
-			return rollbackAndLogErr(err, tx, "unable to execute insert from select")
-		}
+	}
 
-		if err := execAndCheckErr(tx, ctx, fmt.Sprintf(`DROP TABLE %s`, legacyGooseTableName)); err != nil {
-			return rollbackAndLogErr(err, tx, "unable to drop legacy table")
-		}
+	if err := execAndCheckErr(tx, ctx,
+		fmt.Sprintf(`INSERT INTO %s(package, version_id, is_applied, tstamp) SELECT 'main', version_id, is_applied, tstamp FROM %s`,
+			TableName,
+			legacyGooseTableName),
+	); err != nil {
+		return rollbackAndLogErr(err, tx, "unable to execute insert from select")
+	}
+
+	if err := execAndCheckErr(tx, ctx, fmt.Sprintf(`DROP TABLE %s`, legacyGooseTableName)); err != nil {
+		return rollbackAndLogErr(err, tx, "unable to drop legacy table")
 	}
 
 	return tx.Commit()

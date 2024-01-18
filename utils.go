@@ -25,7 +25,12 @@ func previewSQL(s string) string {
 		idx := strings.LastIndex(s[:width], " ")
 		if idx > 0 && idx > int(float64(width)*(2.0/3.0)) && idx < len(s)-3 {
 			s = s[:idx] + "..."
-			return s + strings.Repeat(" ", width-len(s))
+			padSize := width - len(s)
+			if padSize > 0 {
+				s += strings.Repeat(" ", padSize)
+			}
+		
+			return s
 		}
 
 		return s[:width]

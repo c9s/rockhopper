@@ -82,7 +82,7 @@ func status(cmd *cobra.Command, args []string) error {
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Package", "Migration", "Applied At", "Current"})
+	t.AppendHeader(table.Row{"Package", "Version ID", "Source File", "Applied At", "Current"})
 
 	for pkgName, migrations := range migrationMap {
 		currentVersion, err := db.CurrentVersion(ctx, pkgName)
@@ -97,7 +97,7 @@ func status(cmd *cobra.Command, args []string) error {
 			}
 
 			t.AppendRow(table.Row{
-				migration.Package, migration.Source, formatAppliedAt(migration.Record), currentVersionMark(migration.Version, currentVersion),
+				migration.Package, migration.Version, migration.Source, formatAppliedAt(migration.Record), currentVersionMark(migration.Version, currentVersion),
 			})
 		}
 
