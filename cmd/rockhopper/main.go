@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/x-cray/logrus-prefixed-formatter"
@@ -23,7 +23,17 @@ var rootCmd = &cobra.Command{
 	// SilenceUsage is an option to silence usage when an error occurs.
 	SilenceUsage: true,
 
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("preRunE")
+		return nil
+	},
+
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		debug, _ := cmd.Flags().GetBool("debug")
+		if debug || viper.GetBool("debug") {
+			logrus.SetLevel(logrus.DebugLevel)
+		}
+
 		configFile := viper.GetString("config")
 		_, err := os.Stat(configFile)
 		if err != nil && os.IsNotExist(err) {
@@ -50,7 +60,7 @@ func init() {
 
 	// Once the flags are defined, we can bind config keys with flags.
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
-		log.WithError(err).Errorf("failed to bind persistent flags. please check the persistent flags settings.")
+		logrus.WithError(err).Errorf("failed to bind persistent flags. please check the persistent flags settings.")
 	}
 
 	viper.SetEnvPrefix("ROCKHOPPER_")
@@ -59,11 +69,11 @@ func init() {
 	// Enable environment variable binding, the env vars are not overloaded yet.
 	viper.AutomaticEnv()
 
-	log.SetFormatter(&prefixed.TextFormatter{})
+	logrus.SetFormatter(&prefixed.TextFormatter{})
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.WithError(err).Fatalf("cannot execute command")
+		logrus.WithError(err).Fatalf("cannot execute command")
 	}
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/c9s/rockhopper"
@@ -8,6 +10,7 @@ import (
 
 func init() {
 	CreateCmd.Flags().StringP("type", "t", "sql", "migration type, could be \"go\" or \"sql\"")
+	CreateCmd.Flags().StringP("output", "o", "", "output directory")
 	rootCmd.AddCommand(CreateCmd)
 }
 
@@ -32,5 +35,33 @@ func create(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return rockhopper.CreateWithTemplate(config.MigrationsDir, nil, args[0], templateType)
+	outputDir, err := cmd.Flags().GetString("output")
+	if err != nil {
+		return err
+	}
+
+	if outputDir == "" && config.MigrationsDir != "" {
+		outputDir = config.MigrationsDir
+	}
+
+	if outputDir == "" {
+		outputDir = "migrations"
+	}
+
+	if !dirExists(outputDir) {
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return err
+		}
+	}
+
+	return rockhopper.CreateWithTemplate(outputDir, nil, args[0], templateType)
+}
+
+func dirExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+
+	return info.IsDir()
 }

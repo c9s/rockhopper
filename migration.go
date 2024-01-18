@@ -4,25 +4,43 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
+	"reflect"
 	"sort"
-	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
-type Migration struct {
-	Name    string
-	Source  string // path to .sql script
-	Version int64
-	UseTx   bool
+const DefaultPackageName = "main"
+const CorePackageName = "rockhopper"
 
-	Next     *Migration
+// Migration presents the migration script object as a linked-list node.
+// It could link to the next migration object and the previous migration object
+type Migration struct {
+	Name string
+	// Package is the migration script package name
+	Package string
+
+	// Version is the migration version
+	Version int64
+
+	// Source is the path to the .sql script
+	Source string
+
+	UseTx bool
+
+	Chunk *MigrationScriptChunk
+
+	// Next is the next migration to apply (newer migration)
+	Next *Migration
+
+	// Previous is the previous migration (older migration)
 	Previous *Migration
 
+	Record *MigrationRecord
+
 	Registered bool
-	Package    string
 
 	UpFn   TransactionHandler // Up go migration function
 	DownFn TransactionHandler // Down go migration function
@@ -37,110 +55,130 @@ func (m *Migration) String() string {
 
 // Up runs an up migration.
 func (m *Migration) Up(ctx context.Context, db *DB) error {
-	return m.run(ctx, db, DirectionUp)
+	return m.runUp(ctx, db)
 }
 
 // Down runs a down migration.
 func (m *Migration) Down(ctx context.Context, db *DB) error {
-	return m.run(ctx, db, DirectionDown)
+	return m.runDown(ctx, db)
 }
 
-func (m *Migration) run(ctx context.Context, db *DB, direction Direction) error {
-	var err error
-	var tx *sql.Tx = nil
-	var rollback = func(err error) {}
-	var executor SQLExecutor = db
+type statementExecutorFunc func(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error
 
-	if m.UseTx {
-		log.Debug("migration transaction is enabled, starting transaction...")
-
-		tx, err = db.BeginTx(ctx, nil)
-		if err != nil {
-			return errors.Wrap(err, "failed to begin transaction")
-		}
-
-		executor = tx
-		rollback = func(err error) {
-			if err != nil {
-				log.WithError(err).Errorf("error occured, rolling back transaction for version %d (source %s)...", m.Version, m.Source)
-			}
-
-			if err2 := tx.Rollback(); err2 != nil {
-				log.WithError(err2).Errorf("rollback error, can not rollback for version %d (source %s)", m.Version, m.Source)
-			}
-		}
-	} else {
-		log.Debugf("transaction is disabled in migration version: %d", m.Version)
-	}
-
-	switch direction {
-
-	case DirectionUp:
-		log.Infof("upgrading to version %d...", m.Version)
-		if m.UpFn != nil {
-			if err := m.UpFn(ctx, executor); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to upgrade version %d", m.Version)
-			}
-		} else {
-			if err := runStatements(ctx, executor, m.UpStatements); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to upgrade version %d", m.Version)
-			}
-		}
-
-		if err := db.insertVersion(ctx, executor, m.Version); err != nil {
-			rollback(err)
-			return errors.Wrap(err, "failed to insert new migration version")
-		}
-		log.Infof("upgraded to version %d successfully", m.Version)
-
-	case DirectionDown:
-		if m.DownFn != nil {
-			if err := m.DownFn(ctx, executor); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to downgrade version %d", m.Version)
-			}
-		} else {
-			if err := runStatements(ctx, executor, m.DownStatements); err != nil {
-				rollback(err)
-				return errors.Wrapf(err, "failed to downgrade version %d", m.Version)
-			}
-		}
-
-		if err := db.deleteVersion(ctx, executor, m.Version); err != nil {
-			rollback(err)
-			return errors.Wrapf(err, "failed to delete migration version %d", m.Version)
-		}
-
-		log.Infof("downgraded from version %d successfully", m.Version)
-	}
-
-	if m.UseTx && tx != nil {
-		log.Debug("committing transaction...")
-		if err := tx.Commit(); err != nil {
-			return errors.Wrapf(err, "failed to commit transaction for version %d (source %s)", m.Version, m.Source)
+func withoutTransaction(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error {
+	for _, cb := range callbacks {
+		if err2 := cb(ctx, db); err2 != nil {
+			return err2
 		}
 	}
 
 	return nil
 }
 
-var (
-	matchSQLComments = regexp.MustCompile(`(?m)^--.*$[\r\n]*`)
-	matchEmptyEOL    = regexp.MustCompile(`(?m)^$[\r\n]*`) // TODO: Duplicate
-)
+func withTransaction(ctx context.Context, db *sql.DB, callbacks ...TransactionHandler) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
 
-func cleanSQL(s string) string {
-	s = matchSQLComments.ReplaceAllString(s, "")
-	return strings.TrimSpace(matchEmptyEOL.ReplaceAllString(s, ""))
+	for _, cb := range callbacks {
+		if err2 := cb(ctx, tx); err2 != nil {
+			return rollbackAndLogErr(err, tx, "")
+		}
+	}
+
+	return tx.Commit()
 }
 
-func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {
-	for _, stmt := range stmts {
-		log.Infof("executing statement: %s", cleanSQL(stmt.SQL))
+func (m *Migration) getStmtExecutor() statementExecutorFunc {
+	if m.UseTx {
+		return withTransaction
+	}
+	return withoutTransaction
+}
+
+func (m *Migration) runUp(ctx context.Context, db *DB) error {
+	fn := withDefault[TransactionHandler](m.UpFn, func(ctx context.Context, exec SQLExecutor) error {
+		return executeStatements(ctx, exec, m.UpStatements)
+	})
+	finalizer := func(ctx context.Context, exec SQLExecutor) error {
+		return db.insertVersion(ctx, db.DB, m.Package, m.Version, true)
+	}
+
+	var executor = m.getStmtExecutor()
+	return executor(ctx, db.DB, fn, finalizer)
+}
+
+func (m *Migration) runDown(ctx context.Context, db *DB) error {
+	fn := withDefault[TransactionHandler](m.DownFn, func(ctx context.Context, exec SQLExecutor) error {
+		return executeStatements(ctx, exec, m.DownStatements)
+	})
+	finalizer := func(ctx context.Context, exec SQLExecutor) error {
+		return db.deleteVersion(ctx, db.DB, m.Package, m.Version)
+	}
+
+	var executor = m.getStmtExecutor()
+	return executor(ctx, db.DB, fn, finalizer)
+}
+
+type statementExecution func(ctx context.Context, e SQLExecutor, stmt *Statement) error
+
+func withStatementDebug(next statementExecution) statementExecution {
+	return func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+		log.Debug(cleanSQL(stmt.SQL))
+		return next(ctx, e, stmt)
+	}
+}
+
+func withStatementPrettyLog(next statementExecution) statementExecution {
+	return func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+		fmt.Print(text.Colors{text.FgGreen}.Sprint("EXECUTING: "))
+		fmt.Print(text.Colors{text.FgHiWhite}.Sprint(previewSQL(stmt.SQL)), " ")
+
+		err := next(ctx, e, stmt)
+
+		fmt.Printf("[  %6s  ]", text.Colors{text.FgHiGreen}.Sprintf("OK"))
+		fmt.Printf(" ---- %s", text.Colors{text.FgWhite, text.BgBlack}.Sprintf(stmt.Duration.String()))
+		fmt.Print("\n")
+		return err
+	}
+}
+
+func withStatementProfile(next statementExecution) statementExecution {
+	return func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+		p := startProfile(fmt.Sprintf("stmt: %x", stmt))
+		err := next(ctx, e, stmt)
+		p.Stop()
+		log.Debugf("query done, duration: %s", p.String())
+		stmt.Duration = p.duration
+		return err
+	}
+}
+
+func executeStatement(ctx context.Context, e SQLExecutor, stmt *Statement) error {
+	var fn statementExecution = func(ctx context.Context, e SQLExecutor, stmt *Statement) error {
 		if _, err := e.ExecContext(ctx, stmt.SQL); err != nil {
 			return errors.Wrapf(err, "failed to execute SQL query %q, error %s", cleanSQL(stmt.SQL), err.Error())
+		}
+
+		return nil
+	}
+
+	fn = withStatementProfile(fn)
+	if log.GetLevel() == log.DebugLevel {
+		fn = withStatementDebug(fn)
+	} else {
+		fn = withStatementPrettyLog(fn)
+	}
+
+	return fn(ctx, e, stmt)
+}
+
+// executeStatements executes the given statements sequentially
+func executeStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {
+	for _, stmt := range stmts {
+		if err := executeStatement(ctx, e, &stmt); err != nil {
+			return err
 		}
 	}
 
@@ -149,7 +187,50 @@ func runStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error 
 
 type MigrationSlice []*Migration
 
-// helpers so we can use pkg sort
+func (ms MigrationSlice) Head() *Migration {
+	if len(ms) == 0 {
+		return nil
+	}
+
+	return ms[0]
+}
+
+func (ms MigrationSlice) Tail() *Migration {
+	if len(ms) == 0 {
+		return nil
+	}
+
+	return ms[len(ms)-1]
+}
+
+func (ms MigrationSlice) FilterPackage(pkgs []string) (slice MigrationSlice) {
+	for _, s := range ms {
+		if sliceContains(pkgs, s.Package) {
+			slice = append(slice, s)
+		}
+	}
+
+	return slice
+}
+
+func (ms MigrationSlice) MapByPackage() MigrationMap {
+	mm := make(MigrationMap)
+
+	for _, m := range ms {
+		if len(m.Package) == 0 {
+			log.Warnf("unexpected error: found empty package name in migration script: %+v", m)
+		}
+
+		if slice, ok := mm[m.Package]; ok {
+			mm[m.Package] = append(slice, m)
+		} else {
+			mm[m.Package] = MigrationSlice{m}
+		}
+	}
+
+	return mm
+}
+
 func (ms MigrationSlice) Len() int      { return len(ms) }
 func (ms MigrationSlice) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
 func (ms MigrationSlice) Less(i, j int) bool {
@@ -178,20 +259,40 @@ func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 	return nil, fmt.Errorf("migration source version %d not found, available versions: %v", version, ms.Versions())
 }
 
-func (ms MigrationSlice) SortAndConnect() MigrationSlice {
+func (ms MigrationSlice) Sort() MigrationSlice {
 	sort.Sort(ms)
+	return ms
+}
 
+func (ms MigrationSlice) Connect() MigrationSlice {
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
-	for i, m := range ms {
-		var prev *Migration = nil
+	for i := 0; i < len(ms); i++ {
+		m := ms[i]
+
+		if i < len(ms)-1 {
+			m.Next = ms[i+1]
+		}
 		if i > 0 {
-			prev = ms[i-1]
-			ms[i-1].Next = m
+			m.Previous = ms[i-1]
 		}
 
-		ms[i].Previous = prev
+		ms[i] = m
 	}
 
 	return ms
+}
+
+func (ms MigrationSlice) SortAndConnect() MigrationSlice {
+	return ms.Sort().Connect()
+}
+
+func withDefault[T any](a, def T) T {
+	v := reflect.ValueOf(a)
+
+	if !v.IsNil() {
+		return a
+	}
+
+	return def
 }

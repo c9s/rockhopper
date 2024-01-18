@@ -37,11 +37,13 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 			assert.NoError(t, err)
 
 			p := &MigrationParser{}
-			gotUpStmts, gotDownStmts, _, err := p.ParseBytes(data)
+			chunk, err := p.ParseBytes(data)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseBytes() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+
+			gotUpStmts, gotDownStmts := chunk.UpStmts, chunk.DownStmts
 
 			fixtureFile := tt.input + ".fixture"
 
@@ -76,4 +78,27 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 
 		})
 	}
+}
+
+func Test_matchPackageName(t *testing.T) {
+	t.Run("simple", func(t *testing.T) {
+		pkgName, err := matchPackageName("@package main")
+		if assert.NoError(t, err) {
+			assert.Equal(t, "main", pkgName)
+		}
+	})
+
+	t.Run("with prefix", func(t *testing.T) {
+		pkgName, err := matchPackageName("-- @package main")
+		if assert.NoError(t, err) {
+			assert.Equal(t, "main", pkgName)
+		}
+	})
+
+	t.Run("go package name", func(t *testing.T) {
+		pkgName, err := matchPackageName("-- @package github.com/c9s/bbgo")
+		if assert.NoError(t, err) {
+			assert.Equal(t, "github.com/c9s/bbgo", pkgName)
+		}
+	})
 }

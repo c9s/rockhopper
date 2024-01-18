@@ -5,11 +5,21 @@ driver: mysql
 dialect: mysql
 
 # unix socket connection to mysql with password
-# dsn: "root:123123@unix(/opt/local/var/run/mysql57/mysqld.sock)/bbgo_dev?parseTime=true"
+# dsn: "root:123123@unix(/opt/local/var/run/mysql57/mysqld.sock)/test?parseTime=true"
 
-# tcp connection to mysql with password
+# tcp connection to mysql with password (for github)
 dsn: "root:root@tcp(localhost:3306)/bbgo?parseTime=true"
 
 # tcp connection to mysql without password
 # dsn: "root@tcp(localhost:3306)/bbgo_dev?parseTime=true"
-migrationsDir: migrations/mysql
+
+# optional:
+# migrationsDir: migrations/mysql
+
+migrationsDirs:
+- migrations/mysql/app1
+- migrations/mysql/app2
+
+includePackages:
+- app1
+- app2

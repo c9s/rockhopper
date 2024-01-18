@@ -2,23 +2,13 @@ package rockhopper
 
 import (
 	"context"
+	"fmt"
+	"strings"
+
+	"github.com/jedib0t/go-pretty/v6/text"
 )
 
-func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int64, steps int, callbacks ...func(m *Migration)) error {
-	if len(migrations) == 0 {
-		return nil
-	}
-
-	m := migrations[0]
-	if from > 0 {
-		fromMigration, err := migrations.Find(from)
-		if err != nil { // if from is given, ErrVersionNotFound could also be returned, and this should be treated as an error.
-			return err
-		}
-
-		m = fromMigration.Next
-	}
-
+func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks ...func(m *Migration)) error {
 	for ; steps > 0 && m != nil; m = m.Next {
 		if err := m.Up(ctx, db); err != nil {
 			return err
@@ -34,25 +24,46 @@ func UpBySteps(ctx context.Context, db *DB, migrations MigrationSlice, from int6
 	return nil
 }
 
-func Up(ctx context.Context, db *DB, migrations MigrationSlice, from, to int64, callbacks ...func(m *Migration)) error {
-	if len(migrations) == 0 {
-		return nil
+func descMigration(action string, m *Migration) {
+	char := "\u21E1"
+	colors := text.Colors{text.FgBlack, text.BgHiGreen}
+	switch action {
+	case "downgrading":
+		colors = text.Colors{text.FgBlack, text.BgHiCyan}
+		char = "\u21E3"
+	case "upgrading":
+		char = "\u21E1"
+		colors = text.Colors{text.FgBlack, text.BgHiGreen}
 	}
 
-	m := migrations[0]
-	if from > 0 {
-		fromMigration, err := migrations.Find(from)
-		if err != nil { // if from is given, ErrVersionNotFound could also be returned, and this should be treated as an error.
-			return err
-		}
+	fmt.Printf(
+		colors.Sprintf(
+			"%2s %-12s %-6s >> %-28d (%d upgrade statements / %d downgrade statements)",
+			char,
+			strings.ToUpper(action),
+			m.Package,
+			m.Version,
+			len(m.UpStatements), len(m.DownStatements),
+		))
+	fmt.Print("\n")
 
-		m = fromMigration.Next
-	}
+	/*
+		fmt.Printf("%s %s > %s  (%d upgrade statements / %d downgrade statements)\n",
+			text.Colors{text.FgHiWhite, text.BgGreen}.Sprint("MIGRATION"),
+			text.Colors{text.FgGreen}.Sprint(m.Package),
+			text.Colors{text.FgGreen}.Sprint(m.Version),
+			len(m.UpStatements), len(m.DownStatements),
+		)
+	*/
+}
 
+func Up(ctx context.Context, db *DB, m *Migration, to int64, callbacks ...func(m *Migration)) error {
 	for ; m != nil; m = m.Next {
 		if to > 0 && m.Version > to {
 			break
 		}
+
+		descMigration("upgrading", m)
 
 		if err := m.Up(ctx, db); err != nil {
 			return err

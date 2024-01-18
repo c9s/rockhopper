@@ -3,8 +3,9 @@ package rockhopper
 import (
 	"bytes"
 	"go/format"
-	"io/ioutil"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 )
@@ -35,9 +36,9 @@ func TestGetMigrationsMap(t *testing.T) {
 }
 
 func TestMergeMigrationsMap(t *testing.T) {
-	MergeMigrationsMap(map[int64]*rockhopper.Migration{
-		2: &rockhopper.Migration{},
-		3: &rockhopper.Migration{},
+	MergeMigrationsMap(map[registryKey]*rockhopper.Migration{
+		registryKey{ Version: 2 }: &rockhopper.Migration{},
+		registryKey{ Version: 2 }: &rockhopper.Migration{},
 	})
 }
 
@@ -57,19 +58,24 @@ import (
 	"github.com/c9s/rockhopper"
 )
 
-var registeredGoMigrations map[int64]*rockhopper.Migration
+type registryKey struct {
+	Package string
+	Version int64
+}
 
-func MergeMigrationsMap(ms map[int64]*rockhopper.Migration) {
+var registeredGoMigrations = map[registryKey]*rockhopper.Migration{}
+
+func MergeMigrationsMap(ms map[registryKey]*rockhopper.Migration) {
 	for k, m := range ms {
 		if _, ok := registeredGoMigrations[k] ; !ok {
 			registeredGoMigrations[k] = m
 		} else {
-			log.Printf("the migration key %d is duplicated: %+v", k, m)
+			log.Printf("the migration key %+v is duplicated: %+v", k, m)
 		}
 	}
 }
 
-func GetMigrationsMap() map[int64]*rockhopper.Migration {
+func GetMigrationsMap() map[registryKey]*rockhopper.Migration {
 	return registeredGoMigrations
 }
 
@@ -89,11 +95,14 @@ func Migrations() rockhopper.MigrationSlice {
 }
 
 // AddMigration adds a migration with its runtime caller information
-func AddMigration(up, down rockhopper.TransactionHandler) {
+func AddMigration(packageName string, up, down rockhopper.TransactionHandler) {
 	pc, filename, _, _ := runtime.Caller(1)
 
-	funcName := runtime.FuncForPC(pc).Name()
-	packageName := _parseFuncPackageName(funcName)
+	if packageName == "" {
+		funcName := runtime.FuncForPC(pc).Name()
+		packageName = _parseFuncPackageName(funcName)
+	}
+
 	AddNamedMigration(packageName, filename, up, down)
 }
 
@@ -113,10 +122,13 @@ func _parseFuncPackageName(funcName string) string {
 // AddNamedMigration adds a named migration to the registered go migration map
 func AddNamedMigration(packageName, filename string, up, down rockhopper.TransactionHandler) {
 	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[int64]*rockhopper.Migration)
+		registeredGoMigrations = make(map[registryKey]*rockhopper.Migration)
 	}
 
-	v, _ := rockhopper.FileNumericComponent(filename)
+	v, err := rockhopper.FileNumericComponent(filename)
+	if err != nil {
+		panic(fmt.Errorf("unable to parse numeric component from filename %s: %v", filename, err))
+	}
 
 	migration := &rockhopper.Migration{
 		Package:    packageName,
@@ -129,13 +141,13 @@ func AddNamedMigration(packageName, filename string, up, down rockhopper.Transac
 		UseTx:   true,
 	}
 
-	if existing, ok := registeredGoMigrations[v]; ok {
-		panic(fmt.Sprintf("failed to add migration %q: version conflicts with %q", filename, existing.Source))
+	key := registryKey{ Package: packageName, Version: v}
+	if existing, ok := registeredGoMigrations[key]; ok {
+		panic(fmt.Sprintf("failed to add migration %q: version conflicts with key %+v: %+v", filename, key, existing))
 	}
-	registeredGoMigrations[v] = migration
-}
 
-`))
+	registeredGoMigrations[key] = migration
+}`))
 
 var migrationTemplate = template.Must(template.New("cmd.go-migration").Funcs(templateFuncs).Parse(`package {{.PackageName}}
 
@@ -146,35 +158,36 @@ import (
 )
 
 func init() {
-	AddMigration(up{{.CamelName}}, down{{.CamelName}})
+	AddMigration({{ .Migration.Package | quote }}, up{{ .FuncNameBody }}, down{{ .FuncNameBody }})
 
 {{ if .Global }}
-	rockhopper.AddMigration(up{{.CamelName}}, down{{.CamelName}})
+	rockhopper.AddMigration(up{{.FuncNameBody}}, down{{.FuncNameBody}})
 {{ end }}
 }
 
-func up{{.CamelName}}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
+func up{{ .FuncNameBody }}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
 	// This code is executed when the migration is applied.
-{{ range .Migration.UpStatements }}
+{{- range .Migration.UpStatements }}
 	_, err = tx.ExecContext(ctx, {{ .SQL | quote }})
 	if err != nil {
 		return err
 	}
-{{ end }}
+
+{{- end }}
 	return err
 }
 
-func down{{.CamelName}}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
+func down{{ .FuncNameBody }}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
 	// This code is executed when the migration is rolled back.
-{{ range .Migration.DownStatements }}
+{{- range .Migration.DownStatements }}
 	_, err = tx.ExecContext(ctx, {{ .SQL | quote }})
 	if err != nil {
 		return err
 	}
-{{ end }}
+
+{{- end }}
 	return err
-}
-`))
+}`))
 
 type apiTemplateArgs struct {
 	PackageName string
@@ -186,7 +199,7 @@ func renderTemplateAndGoFormatToFile(fp string, tpl *template.Template, a interf
 		return err
 	}
 
-	return ioutil.WriteFile(fp, out, 0666)
+	return os.WriteFile(fp, out, 0666)
 }
 
 func renderTemplateAndGoFormat(tpl *template.Template, a interface{}) ([]byte, error) {
@@ -200,6 +213,8 @@ func renderTemplateAndGoFormat(tpl *template.Template, a interface{}) ([]byte, e
 }
 
 type migrationTemplateArgs struct {
+	FuncNameBody string
+
 	CamelName string
 
 	// BaseName is the file basename of the migration script.
@@ -216,14 +231,19 @@ type migrationTemplateArgs struct {
 	Global bool
 }
 
+var specialCharsRegExp = regexp.MustCompile("\\W")
+
 func renderMigration(packageName string, m *Migration) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
+	funcNameBody := "_" + specialCharsRegExp.ReplaceAllLiteralString(m.Package+"_"+toCamelCase(m.Name), "_")
 	err := migrationTemplate.Execute(buf, migrationTemplateArgs{
-		CamelName:   strings.Title(toCamelCase(m.Name)),
-		BaseName:    filepath.Base(m.Source),
-		Migration:   m,
-		PackageName: packageName,
+		FuncNameBody: funcNameBody,
+		CamelName:    strings.ToTitle(toCamelCase(m.Name)),
+		BaseName:     filepath.Base(m.Source),
+		Migration:    m,
+		PackageName:  packageName,
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +254,8 @@ func renderMigration(packageName string, m *Migration) ([]byte, error) {
 type GoMigrationDumper struct {
 	Dir         string
 	PackageName string
+
+	Wipe bool
 }
 
 func (d *GoMigrationDumper) DumpApi() error {
@@ -262,6 +284,16 @@ func (d *GoMigrationDumper) DumpApi() error {
 }
 
 func (d *GoMigrationDumper) Dump(migrations MigrationSlice) error {
+	if d.Wipe {
+		if err := os.RemoveAll(d.Dir); err != nil {
+			return err
+		}
+
+		if err := os.MkdirAll(d.Dir, 0755); err != nil {
+			return err
+		}
+	}
+
 	if err := d.DumpApi(); err != nil {
 		return err
 	}
@@ -287,6 +319,7 @@ func (d *GoMigrationDumper) DumpMigration(m *Migration) error {
 		return err
 	}
 
-	goFilename := filepath.Join(d.Dir, replaceExt(filepath.Base(m.Source), ".go"))
-	return ioutil.WriteFile(goFilename, out, 0666)
+	goFilename := filepath.Join(d.Dir,
+		specialCharsRegExp.ReplaceAllLiteralString(m.Package, "_")+"_"+replaceExt(filepath.Base(m.Source), ".go"))
+	return os.WriteFile(goFilename, out, 0666)
 }

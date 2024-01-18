@@ -3,10 +3,12 @@ package rockhopper
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -26,6 +28,12 @@ const (
 const scanBufSize = 4 * 1024 * 1024
 
 var matchEmptyLines = regexp.MustCompile(`^\s*$`)
+
+var bufPool = &sync.Pool{
+	New: func() interface{} {
+		return make([]byte, scanBufSize)
+	},
+}
 
 type Direction int
 
@@ -47,42 +55,45 @@ const (
 )
 
 type Statement struct {
-	Direction Direction `json:"direction" yaml:"direction"`
-	SQL       string    `json:"sql" yaml:"sql"`
+	Direction Direction     `json:"direction" yaml:"direction"`
+	SQL       string        `json:"sql" yaml:"sql"`
+	Duration  time.Duration `json:"duration" yaml:"duration"`
+	Line      int           `json:"line"`
+	File      string        `json:"file"`
+}
+
+type MigrationScriptChunk struct {
+	UpStmts, DownStmts []Statement
+	UseTx              bool
+	Package            string
 }
 
 type MigrationParser struct {
-	bufferPool *sync.Pool
 }
 
-func (p *MigrationParser) ParseBytes(data []byte) (upStmts, downStmts []Statement, useTx bool, err error) {
+func (p *MigrationParser) ParseBytes(data []byte) (*MigrationScriptChunk, error) {
 	buf := bytes.NewBuffer(data)
 	return p.Parse(buf)
 }
 
-func (p *MigrationParser) ParseString(data string) (upStmts, downStmts []Statement, useTx bool, err error) {
+func (p *MigrationParser) ParseString(data string) (*MigrationScriptChunk, error) {
 	buf := bytes.NewBufferString(data)
 	return p.Parse(buf)
 }
 
-func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, useTx bool, err error) {
-	if p.bufferPool == nil {
-		p.bufferPool = &sync.Pool{
-			New: func() interface{} {
-				return make([]byte, scanBufSize)
-			},
-		}
-	}
+func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
+	chunk := &MigrationScriptChunk{}
 
 	var buf bytes.Buffer
-	scanBuf := p.bufferPool.Get().([]byte)
-	defer p.bufferPool.Put(scanBuf)
+	scanBuf := bufPool.Get().([]byte)
+	defer bufPool.Put(scanBuf)
 
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(scanBuf, scanBufSize)
 
 	var state = start
-	useTx = true
+
+	chunk.UseTx = true
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -91,16 +102,26 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 		if strings.HasPrefix(line, "--") {
 			cmd := strings.TrimSpace(strings.TrimPrefix(line, "--"))
 
-			// make it goose compatible, replacing +goose Up to just +up
+			// make it goose compatible, replace +goose Up to just +up
 			cmd = strings.ToLower(strings.Replace(cmd, "+goose ", "+", -1))
 
+			if strings.HasPrefix(cmd, "@package") {
+				packageName, err := matchPackageName(line)
+				if err != nil {
+					return nil, errors.Wrapf(err, "incorrect package statement: %s", line)
+				}
+
+				chunk.Package = packageName
+			}
+
 			switch cmd {
+
 			case "+up":
 				switch state {
 				case start:
 					state = stateUp
 				default:
-					return nil, nil, true, errors.Errorf("duplicate '-- +up' annotations; state=%v, see https://github.com/c9s/goose#sql-migrations", state)
+					return nil, fmt.Errorf("duplicate '-- +up' annotations; state=%v, see https://github.com/c9s/goose#sql-migrations", state)
 				}
 				continue
 
@@ -109,7 +130,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 				case stateUp, stateUpStatementEnd:
 					state = stateDown
 				default:
-					err = errors.Errorf("must start with '-- +up' annotation, state=%v", state)
+					return nil, fmt.Errorf("must start with '-- +up' annotation, state=%v", state)
 				}
 				continue
 
@@ -120,8 +141,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 				case stateDown, stateDownStatementEnd:
 					state = stateDownStatementBegin
 				default:
-					err = errors.Errorf("'-- +begin' must be defined after '-- +up' or '-- +down' annotation, state=%v, see https://github.com/c9s/goose#sql-migrations", state)
-					return
+					return nil, fmt.Errorf("'-- +begin' must be defined after '-- +up' or '-- +down' annotation, state=%v, see https://github.com/c9s/goose#sql-migrations", state)
 				}
 
 				continue
@@ -133,14 +153,13 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 				case stateDownStatementBegin:
 					state = stateDownStatementEnd
 				default:
-					err = errors.New("'-- +end' must be defined after '-- +begin', see https://github.com/c9s/goose#sql-migrations")
-					return
+					return nil, errors.New("'-- +end' must be defined after '-- +begin', see https://github.com/c9s/goose#sql-migrations")
 				}
 
 				isEnd = true
 
 			case "!txn":
-				useTx = false
+				chunk.UseTx = false
 				continue
 
 			default:
@@ -156,16 +175,15 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 
 		// Write SQL line to a buffer.
 		if !isEnd {
-			if _, err = buf.WriteString(line + "\n"); err != nil {
-				err = errors.Wrap(err, "failed to write to buf")
-				return
+			if _, err := buf.WriteString(line + "\n"); err != nil {
+				return nil, errors.Wrap(err, "failed to write to buf")
 			}
 		}
 
 		switch state {
 		case stateUp:
 			if p.endsWithSemicolon(line) {
-				upStmts = append(upStmts, Statement{
+				chunk.UpStmts = append(chunk.UpStmts, Statement{
 					Direction: DirectionUp,
 					SQL:       strings.TrimSpace(buf.String()),
 				})
@@ -174,7 +192,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 
 		case stateDown:
 			if p.endsWithSemicolon(line) {
-				downStmts = append(downStmts, Statement{
+				chunk.DownStmts = append(chunk.DownStmts, Statement{
 					Direction: DirectionDown,
 					SQL:       strings.TrimSpace(buf.String()),
 				})
@@ -182,7 +200,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 			}
 
 		case stateUpStatementEnd:
-			upStmts = append(upStmts, Statement{
+			chunk.UpStmts = append(chunk.UpStmts, Statement{
 				Direction: DirectionUp,
 				SQL:       strings.TrimSpace(buf.String()),
 			})
@@ -190,7 +208,7 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 			state = stateUp
 
 		case stateDownStatementEnd:
-			downStmts = append(downStmts, Statement{
+			chunk.DownStmts = append(chunk.DownStmts, Statement{
 				Direction: DirectionDown,
 				SQL:       strings.TrimSpace(buf.String()),
 			})
@@ -199,35 +217,31 @@ func (p *MigrationParser) Parse(r io.Reader) (upStmts, downStmts []Statement, us
 		}
 	} // end of for
 
-	if err = scanner.Err(); err != nil {
-		err = errors.Wrap(err, "failed to scan migration")
-		return
+	if err := scanner.Err(); err != nil {
+		return nil, errors.Wrap(err, "failed to scan migration")
 	}
 	// EOF
 
 	switch state {
 	case start:
-		err = errors.New("failed to parse migration: must start with '-- +up' annotation, see https://github.com/c9s/goose#sql-migrations")
-		return
+		return nil, errors.New("failed to parse migration: must start with '-- +up' annotation, see https://github.com/c9s/goose#sql-migrations")
 
 	case stateUpStatementBegin, stateDownStatementBegin:
-		err = errors.New("failed to parse migration: missing '-- +end' annotation")
-		return
+		return nil, errors.New("failed to parse migration: missing '-- +end' annotation")
 	}
 
 	if bufferRemaining := strings.TrimSpace(buf.String()); len(bufferRemaining) > 0 {
-		err = errors.Errorf("failed to parse migration: state %q, unexpected unfinished SQL query: %q: missing semicolon?", state, bufferRemaining)
-		return
+		return nil, errors.Errorf("failed to parse migration: state %q, unexpected unfinished SQL query: %q: missing semicolon?", state, bufferRemaining)
 	}
 
-	return
+	return chunk, nil
 }
 
 // Checks the line to see if the line has a statement-ending semicolon
 // or if the line contains a double-dash comment.
 func (p *MigrationParser) endsWithSemicolon(line string) bool {
-	scanBuf := p.bufferPool.Get().([]byte)
-	defer p.bufferPool.Put(scanBuf)
+	scanBuf := bufPool.Get().([]byte)
+	defer bufPool.Put(scanBuf)
 
 	prev := ""
 	scanner := bufio.NewScanner(strings.NewReader(line))
@@ -243,4 +257,15 @@ func (p *MigrationParser) endsWithSemicolon(line string) bool {
 	}
 
 	return strings.HasSuffix(prev, ";")
+}
+
+var packageNameRegExp = regexp.MustCompile("@package\\s+(\\S+)")
+
+func matchPackageName(line string) (string, error) {
+	matches := packageNameRegExp.FindStringSubmatch(line)
+	if len(matches) < 2 {
+		return "", errors.New("package name not found")
+	}
+
+	return matches[1], nil
 }

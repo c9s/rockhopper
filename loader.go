@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -29,53 +28,16 @@ func replaceExt(s string, ext string) string {
 
 // MigrationRecord struct.
 type MigrationRecord struct {
-	VersionID int64
-	Time      time.Time
-	IsApplied bool // was this a result of up() or down()
+	ID        int64     `db:"id"`
+	VersionID int64     `db:"version_id"`
+	Time      time.Time `db:"time"`
+	IsApplied bool      `db:"is_applied"` // was this a result of up() or down()
+	Package   string    `db:"package"`
 }
 
 type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
 
-var registeredGoMigrations map[int64]*Migration
-
-// AddMigration adds a migration.
-func AddMigration(up, down TransactionHandler) {
-	pc, filename, _, _ := runtime.Caller(1)
-
-	funcName := runtime.FuncForPC(pc).Name()
-	lastSlash := strings.LastIndexByte(funcName, '/')
-	if lastSlash < 0 {
-		lastSlash = 0
-	}
-	lastDot := strings.LastIndexByte(funcName[lastSlash:], '.') + lastSlash
-	packageName := funcName[:lastDot]
-	AddNamedMigration(packageName, filename, up, down)
-}
-
-// AddNamedMigration : Add a named migration.
-func AddNamedMigration(packageName, filename string, up, down TransactionHandler) {
-	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[int64]*Migration)
-	}
-
-	v, _ := FileNumericComponent(filename)
-
-	migration := &Migration{
-		Package:    packageName,
-		Registered: true,
-
-		Version: v,
-		UpFn:    up,
-		DownFn:  down,
-		Source:  filename,
-		UseTx:   true,
-	}
-
-	if existing, ok := registeredGoMigrations[v]; ok {
-		panic(fmt.Sprintf("failed to add migration %q: version conflicts with %q", filename, existing.Source))
-	}
-	registeredGoMigrations[v] = migration
-}
+var migrationVersionRegExp = regexp.MustCompile("_?(\\d{14,})_")
 
 // FileNumericComponent looks for migration scripts with names in the form:
 // XXX_descriptivename.ext where XXX specifies the version number
@@ -87,17 +49,21 @@ func FileNumericComponent(name string) (int64, error) {
 		return 0, errors.New("not a recognized migration file type")
 	}
 
-	idx := strings.Index(base, "_")
-	if idx < 0 {
-		return 0, errors.New("no separator found")
+	matches := migrationVersionRegExp.FindStringSubmatch(base)
+	if len(matches) < 2 {
+		return 0, fmt.Errorf("version number not found in filename: %s", name)
 	}
 
-	n, e := strconv.ParseInt(base[:idx], 10, 64)
-	if e == nil && n <= 0 {
+	n, err := strconv.ParseInt(matches[1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	if n <= 0 {
 		return 0, errors.New("migration IDs must be greater than zero")
 	}
 
-	return n, e
+	return n, nil
 }
 
 type MigrationLoader interface{}
@@ -110,7 +76,7 @@ func (loader *GoMigrationLoader) Load() (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
-	return migrations.SortAndConnect(), nil
+	return migrations.Sort(), nil
 }
 
 func (loader *GoMigrationLoader) LoadByPackageSuffix(suffix string) (MigrationSlice, error) {
@@ -135,23 +101,84 @@ func (loader *GoMigrationLoader) LoadByExactPackage(packageName string) (Migrati
 	return migrations.SortAndConnect(), nil
 }
 
-type SqlMigrationLoader struct {
-	parser MigrationParser
+type MigrationMap map[string]MigrationSlice
+
+func (m MigrationMap) FilterPackage(pkgNames []string) MigrationMap {
+	newM := make(MigrationMap)
+	for k, v := range m {
+		if sliceContains(pkgNames, k) {
+			newM[k] = v
+		}
+	}
+
+	return newM
 }
 
-// CollectMigrations returns all the valid looking migration scripts in the
+func (m MigrationMap) SortAndConnect() MigrationMap {
+	newM := make(MigrationMap)
+	for k, v := range m {
+		newM[k] = v.Sort().Connect()
+	}
+
+	return newM
+}
+
+type SqlMigrationLoader struct {
+	defaultPackage string
+
+	config *Config
+}
+
+func NewSqlMigrationLoader(config *Config) *SqlMigrationLoader {
+	defaultPkgName := config.Package
+	if defaultPkgName == "" {
+		defaultPkgName = DefaultPackageName
+	}
+
+	return &SqlMigrationLoader{
+		defaultPackage: defaultPkgName,
+		config:         config,
+	}
+}
+
+func (loader *SqlMigrationLoader) SetDefaultPackage(pkgName string) {
+	loader.defaultPackage = pkgName
+}
+
+// Load returns all the valid looking migration scripts in the
+// migrations folders and go func registry, and key them by version.
+func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
+	var all MigrationSlice
+	for _, d := range dirs {
+		slice, err := loader.LoadDir(d)
+		if err != nil {
+			return nil, err
+		}
+
+		all = append(all, slice...)
+	}
+
+	return all.Sort(), nil
+}
+
+// LoadDir returns all the valid looking migration scripts in the
 // migrations folder and go func registry, and key them by version.
-func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
+func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%s directory does not exists", dir)
 	}
 
-	var migrations = MigrationSlice{}
+	var migrations MigrationSlice
 
 	// SQL migration files.
 	files, err := filepath.Glob(dir + "/**.sql")
 	if err != nil {
 		return nil, err
+	}
+
+	defaultPkgName := loader.defaultPackage
+	if defaultPkgName == "" {
+		defaultPkgName = DefaultPackageName
 	}
 
 	for _, file := range files {
@@ -161,9 +188,14 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		}
 
 		name := SqlMigrationFilenamePattern.ReplaceAllString(filepath.Base(file), "$2")
-		migration := &Migration{Version: v, Name: name, Source: file}
+		migration := &Migration{
+			Package: defaultPkgName,
+			Version: v,
+			Name:    name,
+			Source:  file,
+		}
 
-		if err := loader.readSource(migration); err != nil {
+		if err := migration.readSource(); err != nil {
 			return nil, err
 		}
 
@@ -175,10 +207,14 @@ func (loader *SqlMigrationLoader) Load(dir string) (MigrationSlice, error) {
 		migrations = append(migrations, migration)
 	}
 
+	if loader.config != nil && len(loader.config.IncludePackages) > 0 {
+		migrations = migrations.FilterPackage(loader.config.IncludePackages)
+	}
+
 	return migrations.SortAndConnect(), nil
 }
 
-func (loader *SqlMigrationLoader) readSource(m *Migration) error {
+func (m *Migration) readSource() error {
 	f, err := os.Open(m.Source)
 	if err != nil {
 		return errors.Wrapf(err, "ERROR %v: failed to open SQL migration file", filepath.Base(m.Source))
@@ -186,13 +222,19 @@ func (loader *SqlMigrationLoader) readSource(m *Migration) error {
 
 	defer f.Close()
 
-	upStmts, downStmts, useTx, err := loader.parser.Parse(f)
+	var parser MigrationParser
+	chunk, err := parser.Parse(f)
 	if err != nil {
-		return errors.Wrapf(err, "ERROR %v: failed to parse SQL migration file", filepath.Base(m.Source))
+		return errors.Wrapf(err, "%s: failed to parse SQL migration file", filepath.Base(m.Source))
 	}
 
-	m.UseTx = useTx
-	m.UpStatements = upStmts
-	m.DownStatements = downStmts
+	m.Chunk = chunk
+	m.UseTx = chunk.UseTx
+	m.UpStatements = chunk.UpStmts
+	m.DownStatements = chunk.DownStmts
+
+	if chunk.Package != "" {
+		m.Package = chunk.Package
+	}
 	return nil
 }
