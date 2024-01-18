@@ -33,7 +33,7 @@ func TestLegacyGooseTableMigration_sqlite3(t *testing.T) {
 	tx, err := db.Begin()
 	assert.NoError(t, err)
 
-	err = db.insertVersion(ctx, tx, "main", 2000, true)
+	err = db.insertVersion(ctx, tx, "main", "", 2000, true)
 	assert.NoError(t, err)
 
 	err = tx.Commit()

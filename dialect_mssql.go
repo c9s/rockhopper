@@ -15,6 +15,8 @@ func (m SqlServerDialect) getTableNamesSQL() string {
 func (m SqlServerDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE %s (
                 id INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
+    			package VARCHAR(128) NOT NULL DEFAULT 'main',
+    			source_file VARCAHR(255) NOT NULL DEFAULT '',
                 version_id BIGINT NOT NULL,
                 is_applied BIT NOT NULL,
                 tstamp DATETIME NULL DEFAULT CURRENT_TIMESTAMP
@@ -22,7 +24,7 @@ func (m SqlServerDialect) createVersionTableSQL(tableName string) string {
 }
 
 func (m SqlServerDialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES (@p1, @p2, @p3);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES (@p1, @p2, @p3, @p4)", tableName)
 }
 
 func (m SqlServerDialect) selectLastVersionSQL(tableName string) string {

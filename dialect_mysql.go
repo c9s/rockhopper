@@ -16,6 +16,7 @@ func (m MySQLDialect) createVersionTableSQL(tableName string) string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
                 id SERIAL NOT NULL,
                 package VARCHAR(125) NOT NULL DEFAULT 'main',
+    			source_file VARCHAR(255) NOT NULL DEFAULT '',
                 version_id BIGINT NOT NULL,
                 is_applied BOOLEAN NOT NULL,
                 tstamp TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -25,7 +26,7 @@ func (m MySQLDialect) createVersionTableSQL(tableName string) string {
 }
 
 func (m MySQLDialect) insertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, is_applied) VALUES (?, ?, ?);", tableName)
+	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES (?, ?, ?, ?)", tableName)
 }
 
 func (m MySQLDialect) selectLastVersionSQL(tableName string) string {
