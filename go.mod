@@ -1,4 +1,4 @@
-module github.com/c9s/rockhopper
+module github.com/c9s/rockhopper/v2
 
 go 1.20
 
