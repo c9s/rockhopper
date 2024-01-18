@@ -3,7 +3,7 @@ package migrations
 import (
 	"context"
 
-	"github.com/c9s/rockhopper"
+	"github.com/c9s/rockhopper/v2"
 )
 
 func init() {

@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/c9s/rockhopper"
+	"github.com/c9s/rockhopper/v2"
 )
 
 type registryKey struct {

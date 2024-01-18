@@ -3,7 +3,8 @@ package migrations
 import (
 	"testing"
 
-	"github.com/c9s/rockhopper"
+	"github.com/c9s/rockhopper/v2"
+
 	"github.com/stretchr/testify/assert"
 )
 
