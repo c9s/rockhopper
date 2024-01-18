@@ -155,7 +155,7 @@ var migrationTemplate = template.Must(template.New("cmd.go-migration").Funcs(tem
 import (
 	"context"
 
-	"github.com/c9s/rockhopper"
+	"github.com/c9s/rockhopper/v2"
 )
 
 func init() {
