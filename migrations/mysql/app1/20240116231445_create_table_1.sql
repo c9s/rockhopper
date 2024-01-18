@@ -29,9 +29,14 @@ CREATE TABLE app1_a
     UNIQUE KEY `id` (`exchange`, `symbol`, `side`, `id`)
 );
 -- +end
+-- +begin
+ALTER TABLE app1_a ADD COLUMN foo INT DEFAULT 0;
+-- +end
 
 -- +down
-
+-- +begin
+ALTER TABLE app1_a DROP COLUMN foo;
+-- +end
 -- +begin
 DROP TABLE app1_a;
 -- +end

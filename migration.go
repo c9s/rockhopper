@@ -203,6 +203,16 @@ func (ms MigrationSlice) Tail() *Migration {
 	return ms[len(ms)-1]
 }
 
+func (ms MigrationSlice) FilterPackage(pkgs []string) (slice MigrationSlice) {
+	for _, s := range ms {
+		if sliceContains(pkgs, s.Package) {
+			slice = append(slice, s)
+		}
+	}
+
+	return slice
+}
+
 func (ms MigrationSlice) MapByPackage() MigrationMap {
 	mm := make(MigrationMap)
 

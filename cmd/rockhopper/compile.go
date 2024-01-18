@@ -10,6 +10,7 @@ import (
 )
 
 func init() {
+	CompileCmd.Flags().StringArrayP("package", "p", []string{}, "package")
 	CompileCmd.Flags().StringP("output", "o", "pkg/migrations", "path to the migrations package")
 	CompileCmd.Flags().BoolP("no-build", "B", false, "do not build the migration package")
 	rootCmd.AddCommand(CompileCmd)
@@ -35,29 +36,55 @@ func compile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var loader rockhopper.SqlMigrationLoader
-	migrations, err := loader.Load(config.MigrationsDir)
+	skipBuild, err := cmd.Flags().GetBool("no-build")
 	if err != nil {
 		return err
 	}
 
-	err = os.Mkdir(outputDir, 0777)
-	if err != nil && !os.IsExist(err) {
+	includePackages, err := cmd.Flags().GetStringArray("package")
+	if err != nil {
 		return err
 	}
 
-	var dumper = rockhopper.GoMigrationDumper{Dir: outputDir}
-	if err := dumper.Dump(migrations) ; err != nil {
+	if !dirExists(outputDir) {
+		if err := os.MkdirAll(outputDir, 0777); err != nil {
+			return err
+		}
+	}
+
+	loader := rockhopper.NewSqlMigrationLoader(config)
+
+	allMigrations, err := loader.Load(config.MigrationsDirs...)
+	if err != nil {
 		return err
+	}
+
+	if len(allMigrations) == 0 {
+		log.Infof("no migrations found")
+		return nil
+	}
+
+	if len(includePackages) > 0 {
+		log.Infof("include packages: %v", includePackages)
+		allMigrations = allMigrations.FilterPackage(includePackages)
+	}
+
+	var dumper = &rockhopper.GoMigrationDumper{
+		Dir:  outputDir,
+		Wipe: true,
+	}
+
+	if err := dumper.Dump(allMigrations); err != nil {
+		return err
+	}
+
+	if skipBuild {
+		return nil
 	}
 
 	// test compile
 	buildCmd := exec.Command("go", "build", "./"+outputDir)
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
-	if err := buildCmd.Run(); err != nil {
-		return err
-	}
-
-	return nil
+	return buildCmd.Run()
 }

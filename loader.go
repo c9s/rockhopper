@@ -37,6 +37,8 @@ type MigrationRecord struct {
 
 type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
 
+var migrationVersionRegExp = regexp.MustCompile("_?(\\d{14,})_")
+
 // FileNumericComponent looks for migration scripts with names in the form:
 // XXX_descriptivename.ext where XXX specifies the version number
 // and ext specifies the type of migration
@@ -47,12 +49,12 @@ func FileNumericComponent(name string) (int64, error) {
 		return 0, errors.New("not a recognized migration file type")
 	}
 
-	idx := strings.Index(base, "_")
-	if idx < 0 {
-		return 0, errors.New("no separator found")
+	matches := migrationVersionRegExp.FindStringSubmatch(base)
+	if len(matches) < 2 {
+		return 0, fmt.Errorf("version number not found in filename: %s", name)
 	}
 
-	n, err := strconv.ParseInt(base[:idx], 10, 64)
+	n, err := strconv.ParseInt(matches[1], 10, 64)
 	if err != nil {
 		return 0, err
 	}
@@ -123,6 +125,8 @@ func (m MigrationMap) SortAndConnect() MigrationMap {
 
 type SqlMigrationLoader struct {
 	defaultPackage string
+
+	config *Config
 }
 
 func NewSqlMigrationLoader(config *Config) *SqlMigrationLoader {
@@ -133,6 +137,7 @@ func NewSqlMigrationLoader(config *Config) *SqlMigrationLoader {
 
 	return &SqlMigrationLoader{
 		defaultPackage: defaultPkgName,
+		config:         config,
 	}
 }
 
@@ -200,6 +205,10 @@ func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 	// Go migrations registered via goose.AddMigration().
 	for _, migration := range registeredGoMigrations {
 		migrations = append(migrations, migration)
+	}
+
+	if loader.config != nil && len(loader.config.IncludePackages) > 0 {
+		migrations = migrations.FilterPackage(loader.config.IncludePackages)
 	}
 
 	return migrations.SortAndConnect(), nil

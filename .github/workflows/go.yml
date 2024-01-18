@@ -62,6 +62,11 @@ jobs:
       run: |
         go run ./cmd/rockhopper --config rockhopper_sqlite.yaml up --debug
 
+    - name: Compile Migration
+      run: |
+        go run ./cmd/rockhopper --config rockhopper_mysql.yaml compile --output pkg/testing/migrations
+        go test ./pkg/testing/migrations
+
     - name: Build
       run: go build -v ./cmd/rockhopper
 
