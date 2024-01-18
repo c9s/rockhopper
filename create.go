@@ -15,13 +15,8 @@ const VersionIdTimestampFormat = "20060102150405"
 
 // CreateWithTemplate writes a migration file with a give template
 func CreateWithTemplate(dir string, tmpl *template.Template, name, migrationType string) error {
-	type tmplVars struct {
-		Version   string
-		CamelName string
-	}
-
 	version := time.Now().Format(VersionIdTimestampFormat)
-	filename := fmt.Sprintf("%s_%v.%v", version, snakeCase(name), migrationType)
+	filename := fmt.Sprintf("%s_%s.%s", version, snakeCase(name), migrationType)
 
 	if tmpl == nil {
 		if migrationType == "go" {
@@ -42,11 +37,13 @@ func CreateWithTemplate(dir string, tmpl *template.Template, name, migrationType
 	}
 	defer f.Close()
 
-	vars := tmplVars{
+	if err := tmpl.Execute(f, struct {
+		Version   string
+		CamelName string
+	}{
 		Version:   version,
 		CamelName: toCamelCase(name),
-	}
-	if err := tmpl.Execute(f, vars); err != nil {
+	}); err != nil {
 		return errors.Wrap(err, "failed to execute tmpl")
 	}
 
