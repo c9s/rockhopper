@@ -202,7 +202,74 @@ $ rockhopper status
 +---------+----------------+---------------------------------------------------------+--------------------------+---------+
 ```
 
+
+# Migrations
+
+rockhopper supports migrations written in SQL or in Go.
+
+## SQL Migrations
+
+A simple SQL migration looks like:
+
+```sql
+-- +up
+CREATE TABLE post (
+    id int NOT NULL,
+    title text,
+    body text,
+    PRIMARY KEY(id)
+);
+
+-- +down
+DROP TABLE post;
+```
+
+Each migration file must have exactly one `-- +up` annotation.
+The `-- +down` annotation is optional.
+If the file has both annotations, then the `-- +up` annotation **must** come first.
+
+Notice the annotations in the comments.
+Any statements following `-- +up` will be executed as part of a forward migration,
+and any statements following `-- +down` will be executed as part of a rollback.
+
+By default, all migrations are run within a transaction.
+Some statements like `CREATE DATABASE`, however, cannot be run within a transaction,
+You may optionally add `-- !txn` to the top of your migration file in order to skip transactions within that specific migration file.
+Both Up and Down migrations within this file will be run without transactions.
+
+By default, SQL statements are delimited by semicolons - in fact, query statements must end with a semicolon to be properly recognized by rockhopper.
+
+More complex statements (PL/pgSQL) that have semicolons within them must be annotated with `-- +begin` and `-- +end` to be properly recognized. For example:
+
+```sql
+-- +up
+-- +begin
+create or replace procedure prac_transfer(
+   sender int,
+   receiver int, 
+   amount dec
+)
+language plpgsql    
+as $$
+begin
+    -- subtracting the amount from the sender's account 
+    update accounts 
+    set balance = balance - amount 
+    where id = sender;
+
+    -- adding the amount to the receiver's account
+    update accounts 
+    set balance = balance + amount 
+    where id = receiver;
+
+    commit;
+end;$$;-- +end
+```
+
 # API
+
+If you need to integrate rockhopper API, for example, controlling the upgrade/downgrade process from your application,
+you can call the rockhopper API to do these things:
 
 With config file:
 
