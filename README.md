@@ -266,6 +266,60 @@ begin
 end;$$;-- +end
 ```
 
+
+# Embedded SQL migrations
+
+With rockhopper, you can embed the SQL migration files into your application,
+simply run:
+
+```sh
+rockhopper compile --output pkg/migrations
+```
+
+the SQL migration files will be compiled as a GO package, you can simply import the package to load these migrations,
+with the following example:
+
+```go
+import (
+    "context"
+    
+    "github.com/c9s/rockhopper/v2"
+    
+    mysqlMigrations "github.com/c9s/bbgo/pkg/migrations/mysql"
+)
+
+func Migrate(ctx context.Context, db *sql.DB) error {
+	dialect, err := rockhopper.LoadDialect("mysql")
+	if err != nil {
+		return err
+	}
+
+	rh := rockhopper.New(s.Driver, dialect, db, rockhopper.TableName)
+	
+	if err := rh.Touch(ctx); err != nil {
+		return err
+	}
+
+    migrations = mysqlMigrations.Migrations()
+	migrations = migrations.FilterPackage([]string{"main"}).SortAndConnect()
+	if len(migrations) == 0 {
+		return nil
+	}
+
+	_, lastAppliedMigration, err := rh.FindLastAppliedMigration(ctx, migrations)
+	if err != nil {
+		return err
+	}
+
+	if lastAppliedMigration != nil {
+		return rockhopper.Up(ctx, rh, lastAppliedMigration.Next, 0)
+	}
+
+	return rockhopper.Up(ctx, rh, migrations.Head(), 0)
+}
+```
+
+
 # API
 
 If you need to integrate rockhopper API, for example, controlling the upgrade/downgrade process from your application,
