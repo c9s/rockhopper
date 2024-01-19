@@ -55,7 +55,42 @@ Then create a migration file with the following command:
 rockhopper create -t sql --output migrations/module1 add_trades_table
 ```
 
-Now you can check your migration status:
+Here is an example of the migration script (SQL format):
+
+```sql
+-- @package main
+-- !txn
+-- +up
+-- +begin
+CREATE TABLE trades
+(
+    `id`             BIGINT UNSIGNED,
+    `order_id`       BIGINT UNSIGNED NOT NULL,
+    `symbol`         VARCHAR(20) NOT NULL,
+    `price`          DECIMAL(16, 8) UNSIGNED NOT NULL,
+    `quantity`       DECIMAL(16, 8) UNSIGNED NOT NULL,
+    `fee`            DECIMAL(16, 8) UNSIGNED NOT NULL,
+    `fee_currency`   VARCHAR(10) NOT NULL,
+    `side`           VARCHAR(4)  NOT NULL DEFAULT '',
+    `traded_at`      DATETIME(3) NOT NULL,
+    PRIMARY KEY (`gid`),
+    UNIQUE KEY `id` (`exchange`, `symbol`, `side`, `id`)
+);
+-- +end
+-- +begin
+ALTER TABLE trades ADD COLUMN foo INT DEFAULT 0;
+-- +end
+
+-- +down
+-- +begin
+ALTER TABLE trades DROP COLUMN foo;
+-- +end
+-- +begin
+DROP TABLE trades;
+-- +end
+```
+
+After editing, you can check your migration status:
 
 ```sh
 rockhopper status
@@ -105,23 +140,31 @@ Or, more advanced:
 rockhopper --config rockhopper_mysql_local.yaml create -o migrations/mysql/app1 -t sql "create table 1"
 ```
 
-To check migration status:
+## Status
+
+To check migration script status:
 
 ```sh
 rockhopper status
 ```
 
-To upgrade:
+## Upgrade
+
+Apply all available migrations:
 
 ```shell
 rockhopper up
 ```
 
-To downgrade:
+## Downgrade
+
+Roll back a single migration from the current version:
 
 ```shell
 rockhopper down
 ```
+
+## Redo
 
 To redo a migration:
 
@@ -139,6 +182,24 @@ You can change the default config file name by passing the `--config` parameter:
 
 ```shell
 rockhooper --config rockhopper_sqlite3.yaml status
+```
+
+## Status
+
+```sh
+$ rockhopper status
+
++---------+----------------+---------------------------------------------------------+--------------------------+---------+
+| PACKAGE |     VERSION ID | SOURCE FILE                                             | APPLIED AT               | CURRENT |
++---------+----------------+---------------------------------------------------------+--------------------------+---------+
+| app1    | 20240116231445 | migrations/mysql/app1/20240116231445_create_table_1.sql | Fri Jan 19 15:34:51 2024 | -       |
+| app1    | 20240116231513 | migrations/mysql/app1/20240116231513_create_table_2.sql | Fri Jan 19 15:34:51 2024 | *       |
++---------+----------------+---------------------------------------------------------+--------------------------+---------+
+| app2    | 20240117132418 | migrations/mysql/app2/20240117132418_create_table_1.sql | Fri Jan 19 15:34:51 2024 | -       |
+| app2    | 20240117132421 | migrations/mysql/app2/20240117132421_create_table_2.sql | Fri Jan 19 15:34:51 2024 | *       |
++---------+----------------+---------------------------------------------------------+--------------------------+---------+
+|         |                | MIGRATIONS                                              | 4                        |         |
++---------+----------------+---------------------------------------------------------+--------------------------+---------+
 ```
 
 # API
