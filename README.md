@@ -8,6 +8,8 @@ easy-to-use API.
 
 REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cliffs which it ascends by hopping from rock to rock.
 
+![Console Demo](https://raw.githubusercontent.com/c9s/rockhopper/main/screenshots/screenshot1.png)
+
 # Features
 
 - Embeddable migration script - you can embed SQL files as go source files and compile them into a binary
@@ -201,6 +203,20 @@ $ rockhopper status
 |         |                | MIGRATIONS                                              | 4                        |         |
 +---------+----------------+---------------------------------------------------------+--------------------------+---------+
 ```
+
+# Environment Variables
+
+```azure
+ROCKHOPPER_DRIVER=mysql
+ROCKHOPPER_DIALECT=mysql
+ROCKHOPPER_DSN="root:root@unix(/opt/local/var/run/mysql57/mysqld.sock)/bbgo"
+```
+
+`ROCKHOPPER_DRIVER` is the db driver name that will be used for the protocol.
+
+`ROCKHOPPER_DIALECT` is the dialect name that will be used for generating different kinds of SQL, e.g. mysql, sqlite3, postgresql...
+
+`ROCKHOPPER_DSN` is the DSN used for connecting to the database.
 
 
 # Migrations
