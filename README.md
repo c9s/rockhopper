@@ -2,6 +2,8 @@ rockhopper
 ======================
 
 [![Go](https://github.com/c9s/rockhopper/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/c9s/rockhopper/actions/workflows/go.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/c9s/rockhopper/v2.svg)](https://pkg.go.dev/github.com/c9s/rockhopper/v2)
+
 
 rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an
 easy-to-use API.
