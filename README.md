@@ -12,20 +12,68 @@ REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cl
 
 - Embeddable migration script - you can embed SQL files as go source files and compile them into a binary
 - Support multiple drivers
-- Goose compatible
+- Modularized migration package structure
+- Goose <https://github.com/pressly/goose> compatible
 
 # Supported Drivers
 
 - mysql
 - sqlite3
-- mssql
 - postgresql
+- mssql
 
 # Install
 
 ```
-go get github.com/c9s/rockhopper/cmd/rockhopper
+go install github.com/c9s/rockhopper/cmd/rockhopper@latest
 ```
+
+# Quick Start
+
+Add `rockhopper.yaml` with the following content:
+
+```sh
+---
+driver: mysql
+dialect: mysql
+dsn: "root@tcp(localhost:3306)/rockhopper?parseTime=true"
+package: myapp
+migrationsDirs:
+- migrations/module1
+- migrations/module2
+```
+
+And create the directory structure for your migration files (or you can just use `migrations/`:
+
+```sh
+mkdir -p migrations/{module1,module2}
+```
+
+Then create a migration file with the following command:
+
+```sh
+rockhopper create -t sql --output migrations/module1 add_trades_table
+```
+
+Now you can check your migration status:
+
+```sh
+rockhopper status
+```
+
+To upgrade:
+
+```shell
+rockhopper up
+```
+
+To downgrade:
+
+```shell
+rockhopper down
+```
+
+
 
 # Usage
 
