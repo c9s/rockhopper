@@ -411,6 +411,10 @@ if err := rockhopper.Up(ctx, rh, migrations, currentVersion, 0); err != nil {
 }
 ```
 
+# Credit
+
+Thanks to <https://github.com/pressly/goose>, this project was forked from goose.
+
 # License
 
 MIT License
