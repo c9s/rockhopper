@@ -160,6 +160,15 @@ Apply all available migrations:
 rockhopper up
 ```
 
+When marking the migration script with `@package app1`, the migration scripts will be executed per package,
+here is the flow:
+
+- Collect all migration scripts
+- Categorize the migration scripts by their package name
+- Iterate the migration scripts by package
+
+The default package name is set to `main`
+
 ## Downgrade
 
 Roll back a single migration from the current version:
