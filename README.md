@@ -13,7 +13,7 @@ REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cl
 - Embeddable migration script - you can embed SQL files as go source files and compile them into a binary
 - Support multiple drivers
 - Modularized migration package structure
-- Goose <https://github.com/pressly/goose> compatible
+- Compatible with Goose <https://github.com/pressly/goose> 
 
 # Supported Drivers
 
