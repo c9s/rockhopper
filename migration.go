@@ -83,7 +83,7 @@ func withTransaction(ctx context.Context, db *sql.DB, callbacks ...TransactionHa
 
 	for _, cb := range callbacks {
 		if err2 := cb(ctx, tx); err2 != nil {
-			return rollbackAndLogErr(err, tx, "")
+			return rollbackAndLogErr(err2, tx, "")
 		}
 	}
 
@@ -102,7 +102,7 @@ func (m *Migration) runUp(ctx context.Context, db *DB) error {
 		return executeStatements(ctx, exec, m.UpStatements)
 	})
 	finalizer := func(ctx context.Context, exec SQLExecutor) error {
-		return db.insertVersion(ctx, db.DB, m.Package, m.Source, m.Version, true)
+		return db.insertVersion(ctx, exec, m.Package, m.Source, m.Version, true)
 	}
 
 	var executor = m.getStmtExecutor()
@@ -114,7 +114,7 @@ func (m *Migration) runDown(ctx context.Context, db *DB) error {
 		return executeStatements(ctx, exec, m.DownStatements)
 	})
 	finalizer := func(ctx context.Context, exec SQLExecutor) error {
-		return db.deleteVersion(ctx, db.DB, m.Package, m.Version)
+		return db.deleteVersion(ctx, exec, m.Package, m.Version)
 	}
 
 	var executor = m.getStmtExecutor()

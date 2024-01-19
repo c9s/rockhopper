@@ -6,6 +6,8 @@ import (
 
 func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks ...func(m *Migration)) error {
 	for ; steps > 0 && m != nil; m = m.Next {
+		descMigration("upgrading", m)
+
 		if err := m.Up(ctx, db); err != nil {
 			return err
 		}

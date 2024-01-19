@@ -112,6 +112,7 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 				}
 
 				chunk.Package = packageName
+				continue
 			}
 
 			switch cmd {
