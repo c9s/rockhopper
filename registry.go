@@ -6,14 +6,14 @@ import (
 	"strings"
 )
 
-type registryKey struct {
+type RegistryKey struct {
 	Package string
 	Version int64
 }
 
 // registeredGoMigrations stores the global registered migrations
 // applications may register their compiledd migration scrips into this map
-var registeredGoMigrations = map[registryKey]*Migration{}
+var registeredGoMigrations = map[RegistryKey]*Migration{}
 
 // AddMigration registers a migration to the global map
 func AddMigration(up, down TransactionHandler) {
@@ -33,7 +33,7 @@ func AddMigration(up, down TransactionHandler) {
 // AddNamedMigration registers a migration to the global map with a given name
 func AddNamedMigration(packageName, filename string, up, down TransactionHandler) {
 	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[registryKey]*Migration)
+		registeredGoMigrations = make(map[RegistryKey]*Migration)
 	}
 
 	v, _ := FileNumericComponent(filename)
@@ -49,7 +49,7 @@ func AddNamedMigration(packageName, filename string, up, down TransactionHandler
 		UseTx:   true,
 	}
 
-	key := registryKey{Package: packageName, Version: v}
+	key := RegistryKey{Package: packageName, Version: v}
 	if existing, ok := registeredGoMigrations[key]; ok {
 		panic(fmt.Sprintf("failed to add migration %q: version conflicts with %q", filename, existing.Source))
 	}
