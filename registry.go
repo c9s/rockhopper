@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type RegistryKey struct {
@@ -32,7 +34,10 @@ func AddMigration(up, down TransactionHandler) {
 
 // AddNamedMigration registers a migration to the global map with a given name
 func AddNamedMigration(packageName, filename string, up, down TransactionHandler) {
-	v, _ := FileNumericComponent(filename)
+	v, err := FileNumericComponent(filename)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	migration := &Migration{
 		Package:    packageName,
