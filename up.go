@@ -25,6 +25,8 @@ func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks .
 func Upgrade(ctx context.Context, db *DB, migrations MigrationSlice) error {
 	migrationMap := migrations.MapByPackage()
 	for _, pkgMigrations := range migrationMap {
+		pkgMigrations = pkgMigrations.Sort().Connect()
+	
 		_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, pkgMigrations)
 		if err != nil {
 			return err
