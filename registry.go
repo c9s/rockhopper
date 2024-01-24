@@ -32,10 +32,6 @@ func AddMigration(up, down TransactionHandler) {
 
 // AddNamedMigration registers a migration to the global map with a given name
 func AddNamedMigration(packageName, filename string, up, down TransactionHandler) {
-	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[RegistryKey]*Migration)
-	}
-
 	v, _ := FileNumericComponent(filename)
 
 	migration := &Migration{
