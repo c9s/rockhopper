@@ -37,9 +37,9 @@ func TestGetMigrationsMap(t *testing.T) {
 }
 
 func TestMergeMigrationsMap(t *testing.T) {
-	MergeMigrationsMap(map[RegistryKey]*rockhopper.Migration{
-		RegistryKey{ Version: 2 }: &rockhopper.Migration{},
-		RegistryKey{ Version: 2 }: &rockhopper.Migration{},
+	MergeMigrationsMap(map[rockhopper.RegistryKey]*rockhopper.Migration{
+		rockhopper.RegistryKey{ Version: 2 }: &rockhopper.Migration{},
+		rockhopper.RegistryKey{ Version: 2 }: &rockhopper.Migration{},
 	})
 }
 
@@ -59,14 +59,9 @@ import (
 	"github.com/c9s/rockhopper/v2"
 )
 
-type RegistryKey struct {
-	Package string
-	Version int64
-}
+var registeredGoMigrations = map[rockhopper.RegistryKey]*rockhopper.Migration{}
 
-var registeredGoMigrations = map[RegistryKey]*rockhopper.Migration{}
-
-func MergeMigrationsMap(ms map[RegistryKey]*rockhopper.Migration) {
+func MergeMigrationsMap(ms map[rockhopper.RegistryKey]*rockhopper.Migration) {
 	for k, m := range ms {
 		if _, ok := registeredGoMigrations[k] ; !ok {
 			registeredGoMigrations[k] = m
@@ -76,7 +71,7 @@ func MergeMigrationsMap(ms map[RegistryKey]*rockhopper.Migration) {
 	}
 }
 
-func GetMigrationsMap() map[RegistryKey]*rockhopper.Migration {
+func GetMigrationsMap() map[rockhopper.RegistryKey]*rockhopper.Migration {
 	return registeredGoMigrations
 }
 
@@ -123,7 +118,7 @@ func _parseFuncPackageName(funcName string) string {
 // AddNamedMigration adds a named migration to the registered go migration map
 func AddNamedMigration(packageName, filename string, up, down rockhopper.TransactionHandler) {
 	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[RegistryKey]*rockhopper.Migration)
+		registeredGoMigrations = make(map[rockhopper.RegistryKey]*rockhopper.Migration)
 	}
 
 	v, err := rockhopper.FileNumericComponent(filename)
@@ -142,7 +137,7 @@ func AddNamedMigration(packageName, filename string, up, down rockhopper.Transac
 		UseTx:   true,
 	}
 
-	key := RegistryKey{ Package: packageName, Version: v}
+	key := rockhopper.RegistryKey{ Package: packageName, Version: v}
 	if existing, ok := registeredGoMigrations[key]; ok {
 		panic(fmt.Sprintf("failed to add migration %q: version conflicts with key %+v: %+v", filename, key, existing))
 	}
