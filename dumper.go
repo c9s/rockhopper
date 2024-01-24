@@ -117,10 +117,6 @@ func _parseFuncPackageName(funcName string) string {
 
 // AddNamedMigration adds a named migration to the registered go migration map
 func AddNamedMigration(packageName, filename string, up, down rockhopper.TransactionHandler) {
-	if registeredGoMigrations == nil {
-		registeredGoMigrations = make(map[rockhopper.RegistryKey]*rockhopper.Migration)
-	}
-
 	v, err := rockhopper.FileNumericComponent(filename)
 	if err != nil {
 		panic(fmt.Errorf("unable to parse numeric component from filename %s: %v", filename, err))
