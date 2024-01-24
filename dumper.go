@@ -151,10 +151,6 @@ import (
 
 func init() {
 	AddMigration({{ .Migration.Package | quote }}, up{{ .FuncNameBody }}, down{{ .FuncNameBody }})
-
-{{ if .Global }}
-	rockhopper.AddMigration(up{{.FuncNameBody}}, down{{.FuncNameBody}})
-{{ end }}
 }
 
 func up{{ .FuncNameBody }}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
@@ -217,10 +213,6 @@ type migrationTemplateArgs struct {
 
 	// PackageName is the package name that will be used to render the go file.
 	PackageName string
-
-	// Global renders the migration template with the global migration registration calls.
-	// This parameter avoids migration version conflict for different sql dialect (or driver)
-	Global bool
 }
 
 var specialCharsRegExp = regexp.MustCompile("\\W")
