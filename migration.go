@@ -287,9 +287,14 @@ func (ms MigrationSlice) Connect() MigrationSlice {
 
 		if i < len(ms)-1 {
 			m.Next = ms[i+1]
+		} else {
+			m.Next = nil
 		}
+
 		if i > 0 {
 			m.Previous = ms[i-1]
+		} else {
+			m.Previous = nil
 		}
 
 		ms[i] = m
