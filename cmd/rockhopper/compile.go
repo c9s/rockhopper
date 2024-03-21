@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -48,7 +49,7 @@ func compile(cmd *cobra.Command, args []string) error {
 
 	if !dirExists(outputDir) {
 		if err := os.MkdirAll(outputDir, 0777); err != nil {
-			return err
+			return fmt.Errorf("unable to create directory %s, error: %v", outputDir, err)
 		}
 	}
 
