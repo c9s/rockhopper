@@ -29,7 +29,7 @@ REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cl
 # Install
 
 ```
-go install github.com/c9s/rockhopper/cmd/rockhopper@latest
+go install github.com/c9s/rockhopper/cmd/rockhopper@v2.0.3
 ```
 
 # Quick Start
