@@ -6,7 +6,7 @@ require (
 	github.com/c9s/rockhopper v1.2.1
 	github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482
 	github.com/denisenkom/go-mssqldb v0.12.3
-	github.com/go-sql-driver/mysql v1.7.1
+	github.com/go-sql-driver/mysql v1.8.0
 	github.com/jedib0t/go-pretty/v6 v6.5.3
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.19
@@ -21,6 +21,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
