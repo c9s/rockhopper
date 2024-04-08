@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -160,8 +161,12 @@ func (loader *SqlMigrationLoader) SetDefaultPackage(pkgName string) {
 // migrations folders and go func registry, and key them by version.
 // Load method always returns a sorted migration slice
 func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
+	log.Debugf("starting loading sql migrations from %v", dirs)
+
 	var all MigrationSlice
 	for _, d := range dirs {
+		log.Debugf("loading sql migrations from %v", d)
+
 		slice, err := loader.LoadDir(d)
 		if err != nil {
 			return nil, err
