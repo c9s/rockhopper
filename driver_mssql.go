@@ -1,4 +1,5 @@
-// +build !no_mssql
+//go:build mssql
+// +build mssql
 
 package rockhopper
 
