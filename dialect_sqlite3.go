@@ -36,7 +36,7 @@ func (m Sqlite3Dialect) queryVersionsSQL(tableName string) string {
 }
 
 func (m Sqlite3Dialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT package, version_id, is_applied from %s ORDER BY id DESC", tableName))
+	rows, err := db.Query(fmt.Sprintf("SELECT id, package, version_id, is_applied from %s ORDER BY id DESC", tableName))
 	if err != nil {
 		return nil, err
 	}
