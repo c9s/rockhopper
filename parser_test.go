@@ -1,7 +1,6 @@
 package rockhopper
 
 import (
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
@@ -33,7 +32,7 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := ioutil.ReadFile(tt.input)
+			data, err := os.ReadFile(tt.input)
 			assert.NoError(t, err)
 
 			p := &MigrationParser{}
@@ -57,10 +56,10 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 				out, err := yaml.Marshal(fixture)
 				assert.NoError(t, err)
 
-				err = ioutil.WriteFile(fixtureFile, out, 0666)
+				err = os.WriteFile(fixtureFile, out, 0666)
 				assert.NoError(t, err)
 			} else {
-				fixtureData, err := ioutil.ReadFile(fixtureFile)
+				fixtureData, err := os.ReadFile(fixtureFile)
 				assert.NoError(t, err)
 
 				var fixture Fixture

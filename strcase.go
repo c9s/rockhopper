@@ -6,6 +6,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type camelSnakeStateMachine int
@@ -66,11 +69,12 @@ func isAlphaNum(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r)
 }
 
-var snakeCasePattern = regexp.MustCompile("[_\\s]+[a-z]+")
+var snakeCasePattern = regexp.MustCompile(`[_\s]+[a-z]+`)
 
 func toCamelCase(s string) string {
+	titleCaser := cases.Title(language.English)
 	return snakeCasePattern.ReplaceAllStringFunc(s, func(s string) string {
-		return strings.Title(strings.TrimLeft(s, "_ "))
+		return titleCaser.String(strings.TrimLeft(s, "_ "))
 	})
 }
 
