@@ -12,31 +12,24 @@ REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cl
 
 ![Console Demo](https://raw.githubusercontent.com/c9s/rockhopper/main/screenshots/screenshot1.png)
 
-# Features
+## Features
 
-- Embeddable migration script - you can embed SQL files as go source files and compile them into a binary
-- Support multiple drivers
-- Modularized migration package structure
-- Compatible with Goose <https://github.com/pressly/goose> 
+- Embeddable migration script — compile SQL files into Go source and ship them in a single binary
+- Package-based migration organization — group and execute migrations by package name
+- Multi-dialect support: MySQL, SQLite3, PostgreSQL
+- Compatible with [Goose](https://github.com/pressly/goose) migration format
 
-# Supported Drivers
-
-- mysql
-- sqlite3
-- postgresql
-- mssql
-
-# Install
-
-```
-go install github.com/c9s/rockhopper/v2/cmd/rockhopper@v2.0.3
-```
-
-# Quick Start
-
-Add `rockhopper.yaml` with the following content:
+## Install
 
 ```sh
+go install github.com/c9s/rockhopper/v2/cmd/rockhopper@v2.0.7
+```
+
+## Quick Start
+
+Create a config file `rockhopper.yaml`:
+
+```yaml
 ---
 driver: mysql
 dialect: mysql
@@ -47,161 +40,31 @@ migrationsDirs:
 - migrations/module2
 ```
 
-And create the directory structure for your migration files (or you can just use `migrations/`:
+Create directories for your migration files:
 
 ```sh
 mkdir -p migrations/{module1,module2}
 ```
 
-Then create a migration file with the following command:
+Create a new migration:
 
 ```sh
 rockhopper create -t sql --output migrations/module1 add_trades_table
 ```
 
-Here is an example of the migration script (SQL format):
+Edit the generated migration file (see [SQL Migration Format](#sql-migration-format) below), then apply:
 
-```sql
--- @package main
--- !txn
--- +up
--- +begin
-CREATE TABLE trades
-(
-    `id`             BIGINT UNSIGNED,
-    `order_id`       BIGINT UNSIGNED NOT NULL,
-    `symbol`         VARCHAR(20) NOT NULL,
-    `price`          DECIMAL(16, 8) UNSIGNED NOT NULL,
-    `quantity`       DECIMAL(16, 8) UNSIGNED NOT NULL,
-    `fee`            DECIMAL(16, 8) UNSIGNED NOT NULL,
-    `fee_currency`   VARCHAR(10) NOT NULL,
-    `side`           VARCHAR(4)  NOT NULL DEFAULT '',
-    `traded_at`      DATETIME(3) NOT NULL,
-    PRIMARY KEY (`gid`),
-    UNIQUE KEY `id` (`exchange`, `symbol`, `side`, `id`)
-);
--- +end
--- +begin
-ALTER TABLE trades ADD COLUMN foo INT DEFAULT 0;
--- +end
-
--- +down
--- +begin
-ALTER TABLE trades DROP COLUMN foo;
--- +end
--- +begin
-DROP TABLE trades;
--- +end
+```sh
+rockhopper up
 ```
 
-After editing, you can check your migration status:
+Check migration status:
 
 ```sh
 rockhopper status
 ```
 
-To upgrade:
-
-```shell
-rockhopper up
 ```
-
-To downgrade:
-
-```shell
-rockhopper down
-```
-
-
-
-# Usage
-
-Create a directory for your migrations:
-
-```sh
-mkdir migrations
-```
-
-Add `rockhopper.yaml` with the following content:
-
-```sh
----
-driver: mysql
-dialect: mysql
-dsn: "root@tcp(localhost:3306)/rockhopper?parseTime=true"
-migrationsDir: migrations
-```
-
-To add new migration scripts:
-
-```sh
-rockhopper create -t sql my_first_migration
-```
-
-Or, more advanced:
-
-```sh
-rockhopper --config rockhopper_mysql_local.yaml create -o migrations/mysql/app1 -t sql "create table 1"
-```
-
-## Status
-
-To check migration script status:
-
-```sh
-rockhopper status
-```
-
-## Upgrade
-
-Apply all available migrations:
-
-```shell
-rockhopper up
-```
-
-When marking the migration script with `@package app1`, the migration scripts will be executed per package,
-here is the flow:
-
-- Collect all migration scripts
-- Categorize the migration scripts by their package name
-- Iterate the migration scripts by package
-
-The default package name is set to `main`
-
-## Downgrade
-
-Roll back a single migration from the current version:
-
-```shell
-rockhopper down
-```
-
-## Redo
-
-To redo a migration:
-
-```shell
-rockhopper redo
-```
-
-You can compile your SQL migrations into a go package:
-
-```shell
-rockhopper compile -o pkg/migrations
-```
-
-You can change the default config file name by passing the `--config` parameter:
-
-```shell
-rockhooper --config rockhopper_sqlite3.yaml status
-```
-
-## Status
-
-```sh
-$ rockhopper status
-
 +---------+----------------+---------------------------------------------------------+--------------------------+---------+
 | PACKAGE |     VERSION ID | SOURCE FILE                                             | APPLIED AT               | CURRENT |
 +---------+----------------+---------------------------------------------------------+--------------------------+---------+
@@ -215,28 +78,29 @@ $ rockhopper status
 +---------+----------------+---------------------------------------------------------+--------------------------+---------+
 ```
 
-# Environment Variables
+Roll back a single migration:
 
-```azure
-ROCKHOPPER_DRIVER=mysql
-ROCKHOPPER_DIALECT=mysql
-ROCKHOPPER_DSN="root:root@unix(/opt/local/var/run/mysql57/mysqld.sock)/bbgo"
+```sh
+rockhopper down
 ```
 
-`ROCKHOPPER_DRIVER` is the db driver name that will be used for the protocol.
+Redo the last migration (down then up):
 
-`ROCKHOPPER_DIALECT` is the dialect name that will be used for generating different kinds of SQL, e.g. mysql, sqlite3, postgresql...
+```sh
+rockhopper redo
+```
 
-`ROCKHOPPER_DSN` is the DSN used for connecting to the database.
+## Using a Custom Config File
 
+Pass `--config` to use a different config file:
 
-# Migrations
+```sh
+rockhopper --config rockhopper_sqlite.yaml status
+```
 
-rockhopper supports migrations written in SQL or in Go.
+## SQL Migration Format
 
-## SQL Migrations
-
-A simple SQL migration looks like:
+A simple migration:
 
 ```sql
 -- +up
@@ -251,180 +115,141 @@ CREATE TABLE post (
 DROP TABLE post;
 ```
 
-Each migration file must have exactly one `-- +up` annotation.
-The `-- +down` annotation is optional.
-If the file has both annotations, then the `-- +up` annotation **must** come first.
+Each migration file must have exactly one `-- +up` annotation. The `-- +down` annotation is optional. If both are present, `-- +up` must come first.
 
-Notice the annotations in the comments.
-Any statements following `-- +up` will be executed as part of a forward migration,
-and any statements following `-- +down` will be executed as part of a rollback.
+### Annotations
 
-By default, all migrations are run within a transaction.
-Some statements like `CREATE DATABASE`, however, cannot be run within a transaction,
-You may optionally add `-- !txn` to the top of your migration file in order to skip transactions within that specific migration file.
-Both Up and Down migrations within this file will be run without transactions.
+| Annotation | Description |
+|---|---|
+| `-- +up` | Statements following this are executed on upgrade |
+| `-- +down` | Statements following this are executed on rollback |
+| `-- +begin` / `-- +end` | Wrap multi-statement blocks (e.g. PL/pgSQL with internal semicolons) |
+| `-- !txn` | Disable transaction wrapping for this file (e.g. `CREATE DATABASE`) |
+| `-- @package name` | Assign this migration to a named package (default: `main`) |
 
-By default, SQL statements are delimited by semicolons - in fact, query statements must end with a semicolon to be properly recognized by rockhopper.
-
-More complex statements (PL/pgSQL) that have semicolons within them must be annotated with `-- +begin` and `-- +end` to be properly recognized. For example:
+### Multi-statement example
 
 ```sql
 -- +up
 -- +begin
 create or replace procedure prac_transfer(
    sender int,
-   receiver int, 
+   receiver int,
    amount dec
 )
-language plpgsql    
+language plpgsql
 as $$
 begin
-    -- subtracting the amount from the sender's account 
-    update accounts 
-    set balance = balance - amount 
+    update accounts
+    set balance = balance - amount
     where id = sender;
 
-    -- adding the amount to the receiver's account
-    update accounts 
-    set balance = balance + amount 
+    update accounts
+    set balance = balance + amount
     where id = receiver;
 
     commit;
-end;$$;-- +end
+end;$$;
+-- +end
 ```
 
+### Package-based migrations
 
-# Embedded SQL migrations
+When migration scripts use `-- @package <name>`, rockhopper groups and executes them per package:
 
-With rockhopper, you can embed the SQL migration files into your application,
-simply run:
+1. Collect all migration scripts
+2. Categorize by package name
+3. Execute migrations package by package
+
+The default package name is `main`.
+
+## Multi-Dialect Workflow
+
+When supporting multiple databases (e.g. MySQL and SQLite), maintain separate config files and migration directories:
 
 ```sh
-rockhopper compile --output pkg/migrations
+# Create migration files for each dialect
+rockhopper --config rockhopper_sqlite.yaml create --type sql add_pnl_column
+rockhopper --config rockhopper_mysql.yaml create --type sql add_pnl_column
+
+# Edit both files — SQL syntax may differ between dialects
+
+# Apply migrations
+rockhopper --config rockhopper_sqlite.yaml up
+rockhopper --config rockhopper_mysql.yaml up
 ```
 
-the SQL migration files will be compiled as a GO package, you can simply import the package to load these migrations,
-with the following example:
+## Compiling Migrations into Go
+
+Compile SQL migrations into a Go package for embedding in your binary:
+
+```sh
+rockhopper compile --config rockhopper_mysql.yaml --output pkg/migrations/mysql
+rockhopper compile --config rockhopper_sqlite.yaml --output pkg/migrations/sqlite3
+```
+
+Then import and use the compiled migrations in your application:
 
 ```go
 import (
     "context"
-    
+
     "github.com/c9s/rockhopper/v2"
-    
+
     mysqlMigrations "github.com/c9s/bbgo/pkg/migrations/mysql"
 )
 
 func Migrate(ctx context.Context, db *sql.DB) error {
-	dialect, err := rockhopper.LoadDialect("mysql")
-	if err != nil {
-		return err
-	}
+    dialect, err := rockhopper.LoadDialect("mysql")
+    if err != nil {
+        return err
+    }
 
-	rh := rockhopper.New(s.Driver, dialect, db, rockhopper.TableName)
-	
-	if err := rh.Touch(ctx); err != nil {
-		return err
-	}
+    rh := rockhopper.New("mysql", dialect, db, rockhopper.TableName)
 
-    migrations = mysqlMigrations.Migrations()
-	migrations = migrations.FilterPackage([]string{"main"}).SortAndConnect()
-	if len(migrations) == 0 {
-		return nil
-	}
+    if err := rh.Touch(ctx); err != nil {
+        return err
+    }
 
-	_, lastAppliedMigration, err := rh.FindLastAppliedMigration(ctx, migrations)
-	if err != nil {
-		return err
-	}
+    migrations := mysqlMigrations.Migrations()
+    migrations = migrations.FilterPackage([]string{"main"}).SortAndConnect()
+    if len(migrations) == 0 {
+        return nil
+    }
 
-	if lastAppliedMigration != nil {
-		return rockhopper.Up(ctx, rh, lastAppliedMigration.Next, 0)
-	}
+    _, lastAppliedMigration, err := rh.FindLastAppliedMigration(ctx, migrations)
+    if err != nil {
+        return err
+    }
 
-	return rockhopper.Up(ctx, rh, migrations.Head(), 0)
+    if lastAppliedMigration != nil {
+        return rockhopper.Up(ctx, rh, lastAppliedMigration.Next, 0)
+    }
+
+    return rockhopper.Up(ctx, rh, migrations.Head(), 0)
 }
 ```
 
+## Environment Variables
 
-# API
+You can override config file values with environment variables:
 
-If you need to integrate rockhopper API, for example, controlling the upgrade/downgrade process from your application,
-you can call the rockhopper API to do these things:
+| Variable | Description |
+|---|---|
+| `ROCKHOPPER_DRIVER` | Database driver name (e.g. `mysql`, `sqlite3`, `postgres`) |
+| `ROCKHOPPER_DIALECT` | SQL dialect for query generation |
+| `ROCKHOPPER_DSN` | Data source name for database connection |
 
-With config file:
+Example with [dotenv](https://github.com/joho/godotenv):
 
-```go
-// load config into the global instance
-config, err = rockhopper.LoadConfig(configFile)
-if err != nil {
-    log.Fatal(err)
-}
-
-db, err := rockhopper.OpenByConfig(config)
-if err != nil {
-    return err
-}
-
-defer db.Close()
-
-currentVersion, err = db.CurrentVersion()
-if err != nil {
-    return err
-}
-
-loader := &rockhopper.SqlMigrationLoader{}
-migrations, err := loader.Load(config.MigrationsDir)
-if err != nil {
-    return err
-}
-
-for _, m := range migrations {
-	// ....
-}
-
-err = rockhopper.Up(ctx, db, migrations, currentVersion, to, func(m *rockhopper.Migration) {
-    log.Infof("migration %v is applied", m.Version)
-})
+```sh
+dotenv -f .env.local -- rockhopper --config rockhopper_mysql.yaml up
 ```
 
-Without config file:
-
-```go
-driver := os.Getenv("DB_DRIVER")
-
-dialect, err := rockhopper.LoadDialect(driver)
-if err != nil {
-	return err
-}
-
-var migrations rockhopper.MigrationSlice
-
-switch s.Driver {
-	case "sqlite3":
-		migrations = sqlite3Migrations.Migrations()
-	case "mysql":
-		migrations = mysqlMigrations.Migrations()
-}
-
-// sqlx.DB is different from sql.DB
-rh := rockhopper.New(s.Driver, dialect, s.DB.DB)
-
-currentVersion, err := rh.CurrentVersion()
-if err != nil {
-	return err
-}
-
-if err := rockhopper.Up(ctx, rh, migrations, currentVersion, 0); err != nil {
-	return err
-}
-```
-
-# Credit
+## Credit
 
 Thanks to <https://github.com/pressly/goose>, this project was forked from goose.
 
-# License
+## License
 
 MIT License
-

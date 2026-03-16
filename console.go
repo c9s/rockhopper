@@ -20,7 +20,7 @@ func descMigration(action string, m *Migration) {
 		colors = text.Colors{text.FgBlack, text.BgHiGreen}
 	}
 
-	fmt.Printf(
+	fmt.Print(
 		colors.Sprintf(
 			"%2s %-12s %-6s >> %-28d (%d upgrade statements / %d downgrade statements) %2s",
 			strings.Repeat(char, 2),

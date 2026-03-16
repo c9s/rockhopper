@@ -20,11 +20,11 @@ var (
 
 	ErrVersionNotFound = errors.New("migration version not found")
 
-	SqlMigrationFilenamePattern = regexp.MustCompile("(\\d+)_(\\w+)\\.sql$")
+	SqlMigrationFilenamePattern = regexp.MustCompile(`(\d+)_(\w+)\.sql$`)
 )
 
 func replaceExt(s string, ext string) string {
-	return regexp.MustCompile("\\.\\w+$").ReplaceAllString(s, ext)
+	return regexp.MustCompile(`\.\w+$`).ReplaceAllString(s, ext)
 }
 
 // MigrationRecord struct.

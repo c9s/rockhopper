@@ -215,7 +215,7 @@ type migrationTemplateArgs struct {
 	PackageName string
 }
 
-var specialCharsRegExp = regexp.MustCompile("\\W")
+var specialCharsRegExp = regexp.MustCompile(`\W`)
 
 func renderMigration(packageName string, m *Migration) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
