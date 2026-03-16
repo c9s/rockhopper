@@ -4,6 +4,7 @@ rockhopper
 [![Go](https://github.com/c9s/rockhopper/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/c9s/rockhopper/actions/workflows/go.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/c9s/rockhopper/v2.svg)](https://pkg.go.dev/github.com/c9s/rockhopper/v2)
 [![Go Report Card](https://goreportcard.com/badge/github.com/c9s/rockhopper/v2)](https://goreportcard.com/report/github.com/c9s/rockhopper/v2)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-D97757?logo=claude&logoColor=fff)](https://claude.ai/code)
 
 rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an
 easy-to-use API.
@@ -18,6 +19,7 @@ REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cl
 - Package-based migration organization — group and execute migrations by package name
 - Multi-dialect support: MySQL, SQLite3, PostgreSQL
 - Compatible with [Goose](https://github.com/pressly/goose) migration format
+- Built-in [Claude Code](https://claude.ai/code) skills for AI-assisted migration management
 
 ## Install
 
@@ -244,6 +246,30 @@ Example with [dotenv](https://github.com/joho/godotenv):
 
 ```sh
 dotenv -f .env.local -- rockhopper --config rockhopper_mysql.yaml up
+```
+
+## Claude Code Support
+
+Rockhopper ships with built-in [Claude Code](https://claude.ai/code) skills, so you can manage migrations conversationally from your terminal. The following slash commands are available when working in a rockhopper-based project:
+
+| Command | Description |
+|---|---|
+| `/create-migration <name>` | Create migration files for all configured dialects at once |
+| `/compile-migrations` | Compile SQL migrations into Go source for embedding |
+| `/apply-migrations` | Apply pending migrations (`up`) |
+| `/rollback-migration` | Roll back the last applied migration (`down`) with confirmation |
+| `/migration-status` | Show migration status across all configured databases |
+
+These skills auto-discover `rockhopper_*.yaml` config files in your project root, so they work out of the box for any multi-dialect setup.
+
+There is also a helper script `scripts/create-migration.sh` that can be used independently:
+
+```sh
+# Create migration files for all dialects
+bash scripts/create-migration.sh add_pnl_column
+
+# Specify migration type
+bash scripts/create-migration.sh -t sql add_trades_table
 ```
 
 ## Credit
