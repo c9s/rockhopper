@@ -400,7 +400,7 @@ func rollbackAndLogErr(originErr error, txn *sql.Tx, msg string, args ...any) er
 			return errors.Wrapf(originErr, msg, args...)
 		}
 
-		return errors.Wrapf(originErr, err.Error())
+		return errors.Wrap(originErr, err.Error())
 	}
 
 	return originErr

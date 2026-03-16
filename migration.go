@@ -145,13 +145,13 @@ func withStatementPrettyLog(next statementExecution) statementExecution {
 		err := next(ctx, e, stmt)
 
 		if err != nil {
-			fmt.Printf("[  %6s  ]", text.Colors{text.FgHiRed}.Sprintf("FAILED"))
+			fmt.Printf("[  %s  ]", text.Colors{text.FgHiRed}.Sprint("FAILED"))
 			fmt.Print("\n")
 			log.Error(stmt.SQL)
 			log.Error(err.Error())
 		} else {
-			fmt.Printf("[  %6s  ]", text.Colors{text.FgHiGreen}.Sprintf("OK"))
-			fmt.Printf(" ---- %s", text.Colors{text.FgWhite, text.BgBlack}.Sprintf(stmt.Duration.String()))
+			fmt.Printf("[  %s  ]", text.Colors{text.FgHiGreen}.Sprint("OK"))
+			fmt.Printf(" ---- %s", text.Colors{text.FgWhite, text.BgBlack}.Sprint(stmt.Duration.String()))
 			fmt.Print("\n")
 		}
 
