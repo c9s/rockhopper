@@ -32,8 +32,6 @@ func LoadDialect(d string) (SQLDialect, error) {
 		return &MySQLDialect{}, nil
 	case "sqlite3":
 		return &Sqlite3Dialect{}, nil
-	case "mssql":
-		return &SqlServerDialect{}, nil
 	case "redshift":
 		return &RedshiftDialect{}, nil
 	case "tidb":

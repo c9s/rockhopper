@@ -66,8 +66,6 @@ func BuildDSNFromEnvVars(driver string) (string, error) {
 
 func castDriverName(driver string) string {
 	switch driver {
-	case "mssql":
-		return "sqlserver"
 	case "redshift":
 		return "postgres"
 	case "tidb":
@@ -103,7 +101,7 @@ func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (
 
 	switch driverName {
 	// supported drivers
-	case "postgres", "sqlite3", "mysql", "sqlserver":
+	case "postgres", "sqlite3", "mysql":
 	default:
 		return nil, fmt.Errorf("unsupported driver %s", driverName)
 	}
@@ -327,7 +325,7 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 			}
 		*/
 
-	case *Sqlite3Dialect, *SqlServerDialect:
+	case *Sqlite3Dialect:
 	}
 
 	if err := execAndCheckErr(tx, ctx,
