@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -84,7 +85,7 @@ func compile(cmd *cobra.Command, args []string) error {
 	}
 
 	// test compile
-	buildCmd := exec.Command("go", "build", "./"+outputDir)
+	buildCmd := exec.Command("go", "build", "./"+filepath.Clean(outputDir)) //nolint:gosec
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
 	return buildCmd.Run()

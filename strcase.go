@@ -77,4 +77,3 @@ func toCamelCase(s string) string {
 		return titleCaser.String(strings.TrimLeft(s, "_ "))
 	})
 }
-

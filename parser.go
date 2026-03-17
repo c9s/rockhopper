@@ -31,7 +31,8 @@ var matchEmptyLines = regexp.MustCompile(`^\s*$`)
 
 var bufPool = &sync.Pool{
 	New: func() interface{} {
-		return make([]byte, scanBufSize)
+		b := make([]byte, scanBufSize)
+		return &b
 	},
 }
 
@@ -85,11 +86,11 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 	chunk := &MigrationScriptChunk{}
 
 	var buf bytes.Buffer
-	scanBuf := bufPool.Get().([]byte)
-	defer bufPool.Put(scanBuf)
+	scanBufPtr := bufPool.Get().(*[]byte)
+	defer bufPool.Put(scanBufPtr)
 
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(scanBuf, scanBufSize)
+	scanner.Buffer(*scanBufPtr, scanBufSize)
 
 	var state = start
 
@@ -103,7 +104,7 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 			cmd := strings.TrimSpace(strings.TrimPrefix(line, "--"))
 
 			// make it goose compatible, replace +goose Up to just +up
-			cmd = strings.ToLower(strings.Replace(cmd, "+goose ", "+", -1))
+			cmd = strings.ToLower(strings.ReplaceAll(cmd, "+goose ", "+"))
 
 			if strings.HasPrefix(cmd, "@package") {
 				packageName, err := matchPackageName(line)
@@ -241,12 +242,12 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 // Checks the line to see if the line has a statement-ending semicolon
 // or if the line contains a double-dash comment.
 func (p *MigrationParser) endsWithSemicolon(line string) bool {
-	scanBuf := bufPool.Get().([]byte)
-	defer bufPool.Put(scanBuf)
+	scanBufPtr := bufPool.Get().(*[]byte)
+	defer bufPool.Put(scanBufPtr)
 
 	prev := ""
 	scanner := bufio.NewScanner(strings.NewReader(line))
-	scanner.Buffer(scanBuf, scanBufSize)
+	scanner.Buffer(*scanBufPtr, scanBufSize)
 	scanner.Split(bufio.ScanWords)
 
 	for scanner.Scan() {
@@ -260,7 +261,7 @@ func (p *MigrationParser) endsWithSemicolon(line string) bool {
 	return strings.HasSuffix(prev, ";")
 }
 
-var packageNameRegExp = regexp.MustCompile("@package\\s+(\\S+)")
+var packageNameRegExp = regexp.MustCompile(`@package\s+(\S+)`)
 
 func matchPackageName(line string) (string, error) {
 	matches := packageNameRegExp.FindStringSubmatch(line)
