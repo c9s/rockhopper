@@ -57,7 +57,7 @@ func OpenWithConfig(config *Config) (*DB, error) {
 
 func BuildDSNFromEnvVars(driver string) (string, error) {
 	switch driver {
-	case "mysql":
+	case DialectMySQL:
 		return buildMySqlDSN()
 
 	}
@@ -66,12 +66,10 @@ func BuildDSNFromEnvVars(driver string) (string, error) {
 
 func castDriverName(driver string) string {
 	switch driver {
-	case "mssql":
-		return "sqlserver"
-	case "redshift":
-		return "postgres"
-	case "tidb":
-		return "mysql"
+	case DialectRedshift:
+		return DialectPostgres
+	case DialectTiDB:
+		return DialectMySQL
 	}
 
 	return driver
@@ -103,7 +101,7 @@ func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (
 
 	switch driverName {
 	// supported drivers
-	case "postgres", "sqlite3", "mysql", "sqlserver":
+	case DialectPostgres, DialectSQLite3, DialectMySQL:
 	default:
 		return nil, fmt.Errorf("unsupported driver %s", driverName)
 	}
@@ -196,7 +194,7 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 }
 
 func (db *DB) LoadMigrationRecordsByPackage(ctx context.Context, pkgName string) ([]MigrationRecord, error) {
-	rows, err := db.DB.QueryContext(ctx, db.dialect.queryVersionsSQL(db.tableName), pkgName)
+	rows, err := db.QueryContext(ctx, db.dialect.queryVersionsSQL(db.tableName), pkgName)
 	if err != nil {
 		return nil, err
 	}
@@ -260,17 +258,14 @@ func (db *DB) runCoreMigration(ctx context.Context) error {
 	return db.createVersionTable(ctx, db, VersionRockhopperV1)
 }
 
-func (db *DB) upgradeCoreMigrations(ctx context.Context, currentVersion int64) error {
-	if currentVersion < 1 { /* do something */
-	}
-	if currentVersion < 2 { /* do something */
-	}
+func (db *DB) upgradeCoreMigrations(_ context.Context, _ int64) error {
+	// placeholder for future core migration upgrades
 	return nil
 }
 
 // queryLatestVersion selects the latest db version of a package
 func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, error) {
-	row := db.DB.QueryRowContext(ctx,
+	row := db.QueryRowContext(ctx,
 		db.dialect.selectLastVersionSQL(TableName), pkgName)
 
 	if err := row.Err(); err != nil {
@@ -295,7 +290,7 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 		return err
 	}
 
-	tx, err := db.DB.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
@@ -327,7 +322,7 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 			}
 		*/
 
-	case *Sqlite3Dialect, *SqlServerDialect:
+	case *Sqlite3Dialect:
 	}
 
 	if err := execAndCheckErr(tx, ctx,

@@ -38,7 +38,7 @@ type MigrationRecord struct {
 
 type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
 
-var migrationVersionRegExp = regexp.MustCompile("_?(\\d{14,})_")
+var migrationVersionRegExp = regexp.MustCompile(`_?(\d{14,})_`)
 
 func parseVersionID(name string) (string, error) {
 	matches := migrationVersionRegExp.FindStringSubmatch(name)

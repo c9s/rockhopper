@@ -15,8 +15,6 @@ jobs:
 
     strategy:
       matrix:
-        redis-version:
-        - "6.2"
         go-version:
         - "1.25"
     env:

@@ -56,7 +56,7 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 				out, err := yaml.Marshal(fixture)
 				assert.NoError(t, err)
 
-				err = os.WriteFile(fixtureFile, out, 0666)
+				err = os.WriteFile(fixtureFile, out, 0600)
 				assert.NoError(t, err)
 			} else {
 				fixtureData, err := os.ReadFile(fixtureFile)

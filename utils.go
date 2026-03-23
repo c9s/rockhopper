@@ -29,7 +29,7 @@ func previewSQL(s string) string {
 			if padSize > 0 {
 				s += strings.Repeat(" ", padSize)
 			}
-		
+
 			return s
 		}
 

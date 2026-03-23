@@ -38,8 +38,8 @@ func TestGetMigrationsMap(t *testing.T) {
 
 func TestMergeMigrationsMap(t *testing.T) {
 	MergeMigrationsMap(map[rockhopper.RegistryKey]*rockhopper.Migration{
-		rockhopper.RegistryKey{ Version: 2 }: &rockhopper.Migration{},
-		rockhopper.RegistryKey{ Version: 2 }: &rockhopper.Migration{},
+		{Version: 2}: {},
+		{Version: 3}: {},
 	})
 }
 
@@ -187,7 +187,7 @@ func renderTemplateAndGoFormatToFile(fp string, tpl *template.Template, a interf
 		return err
 	}
 
-	return os.WriteFile(fp, out, 0666)
+	return os.WriteFile(fp, out, 0600)
 }
 
 func renderTemplateAndGoFormat(tpl *template.Template, a interface{}) ([]byte, error) {
@@ -305,5 +305,5 @@ func (d *GoMigrationDumper) DumpMigration(m *Migration) error {
 
 	goFilename := filepath.Join(d.Dir,
 		specialCharsRegExp.ReplaceAllLiteralString(m.Package, "_")+"_"+replaceExt(filepath.Base(m.Source), ".go"))
-	return os.WriteFile(goFilename, out, 0666)
+	return os.WriteFile(goFilename, out, 0600)
 }

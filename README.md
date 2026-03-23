@@ -92,13 +92,132 @@ Redo the last migration (down then up):
 rockhopper redo
 ```
 
-## Using a Custom Config File
+## CLI Commands
+
+### Global Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--config` | `rockhopper.yaml` | Path to config file |
+| `--debug` | `false` | Enable debug logging |
+
+### `up` — Apply pending migrations
+
+```sh
+rockhopper up                # apply all pending migrations
+rockhopper up --steps 3      # apply the next 3 pending migrations
+rockhopper up --to 20240117  # apply up to a specific version
+```
+
+| Flag | Description |
+|---|---|
+| `--steps` | Number of migrations to apply |
+| `--to` | Target version to migrate up to |
+
+### `down` — Roll back migrations
+
+```sh
+rockhopper down              # roll back the last applied migration
+rockhopper down --steps 3    # roll back the last 3 migrations
+rockhopper down --to 20240116  # roll back down to a specific version
+rockhopper down --all        # roll back all applied migrations
+```
+
+| Flag | Description |
+|---|---|
+| `--steps` | Number of migrations to roll back |
+| `--to` | Target version to roll back to |
+| `--all` | Roll back all migrations |
+
+### `redo` — Redo the last migration
+
+Rolls back the last applied migration, then re-applies it:
+
+```sh
+rockhopper redo
+```
+
+### `status` — Show migration status
+
+```sh
+rockhopper status
+```
+
+### `create` — Create a new migration file
+
+```sh
+rockhopper create -t sql --output migrations/mysql add_trades_table
+rockhopper create -t go --output migrations add_custom_logic
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `-t`, `--type` | `sql` | Migration type: `sql` or `go` |
+| `-o`, `--output` | from config | Output directory for the migration file |
+
+Migration files are named with a timestamp prefix: `{YYYYMMDDhhmmss}_{name}.sql`
+
+### `compile` — Compile SQL migrations into Go
+
+```sh
+rockhopper compile --output pkg/migrations/mysql
+rockhopper compile --output pkg/migrations/mysql --package main --package app2
+rockhopper compile --output pkg/migrations/mysql --no-build
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `-o`, `--output` | `pkg/migrations` | Output directory for the generated Go package |
+| `-p`, `--package` | all | Filter specific packages to compile (repeatable) |
+| `-B`, `--no-build` | `false` | Skip building the package after compiling |
+
+### `align` — Align migration version
+
+Synchronize the database state to a specific migration version:
+
+```sh
+rockhopper align main 20240116231445
+```
+
+Arguments: `<packageName> <versionID>`
+
+## Configuration
+
+### Config File
 
 Pass `--config` to use a different config file:
 
 ```sh
 rockhopper --config rockhopper_sqlite.yaml status
 ```
+
+### Config Fields
+
+```yaml
+---
+driver: mysql                    # Database driver: mysql, sqlite3, postgres
+dialect: mysql                   # SQL dialect (defaults to driver if omitted)
+dsn: "root@tcp(localhost:3306)/mydb?parseTime=true"
+package: myapp                   # Default package name (defaults to "main")
+tableName: rockhopper_versions   # Version table name (defaults to "rockhopper_versions")
+migrationsDirs:                  # List of migration directories
+- migrations/module1
+- migrations/module2
+includePackages:                 # Optional: only include these packages
+- main
+- app2
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `driver` | | Database driver: `mysql`, `sqlite3`, `postgres` |
+| `dialect` | same as driver | SQL dialect for query generation. Also supports `tidb` (uses mysql) and `redshift` (uses postgres) |
+| `dsn` | | Data source name / connection string |
+| `package` | `main` | Default migration package name |
+| `tableName` | `rockhopper_versions` | Migration version table name |
+| `migrationsDir` | `migrations` | Single migration directory (use `migrationsDirs` for multiple) |
+| `migrationsDirs` | | List of migration directories |
+| `includePackages` | all | Whitelist of packages to include when loading migrations |
 
 ## SQL Migration Format
 
@@ -155,15 +274,38 @@ end;$$;
 -- +end
 ```
 
+### Non-transactional migrations
+
+Use `-- !txn` for statements that cannot run inside a transaction:
+
+```sql
+-- +up
+-- !txn
+CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
+
+-- +down
+-- !txn
+DROP INDEX CONCURRENTLY idx_users_email;
+```
+
 ### Package-based migrations
 
-When migration scripts use `-- @package <name>`, rockhopper groups and executes them per package:
+Use `-- @package <name>` to assign migrations to named packages. Rockhopper groups and executes them per package:
+
+```sql
+-- @package billing
+-- +up
+CREATE TABLE invoices (id INT PRIMARY KEY, amount DECIMAL(10,2));
+
+-- +down
+DROP TABLE invoices;
+```
 
 1. Collect all migration scripts
 2. Categorize by package name
 3. Execute migrations package by package
 
-The default package name is `main`.
+The default package name is `main`. Use `includePackages` in your config to selectively apply only certain packages.
 
 ## Multi-Dialect Workflow
 
@@ -190,15 +332,24 @@ rockhopper compile --config rockhopper_mysql.yaml --output pkg/migrations/mysql
 rockhopper compile --config rockhopper_sqlite.yaml --output pkg/migrations/sqlite3
 ```
 
+The generated package provides:
+
+- `Migrations()` — returns all compiled migrations as a sorted `MigrationSlice`
+- `SortedMigrations()` — alias for `Migrations()`
+- `GetMigrationsMap()` — returns migrations grouped by package
+- `MergeMigrationsMap()` — merge additional migrations at runtime
+- `AddMigration()` — register new migrations dynamically
+
 Then import and use the compiled migrations in your application:
 
 ```go
 import (
     "context"
+    "database/sql"
 
     "github.com/c9s/rockhopper/v2"
 
-    mysqlMigrations "github.com/c9s/bbgo/pkg/migrations/mysql"
+    mysqlMigrations "github.com/yourorg/yourapp/pkg/migrations/mysql"
 )
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -232,15 +383,160 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 }
 ```
 
+## Go API
+
+Rockhopper can be used as a library in your Go application. Below are the key APIs.
+
+### Opening a Database Connection
+
+```go
+// From a config struct
+db, err := rockhopper.OpenWithConfig(config)
+
+// From environment variables (reads MYAPP_DRIVER, MYAPP_DIALECT, MYAPP_DSN)
+db, err := rockhopper.OpenWithEnv("MYAPP")
+
+// Manual setup
+dialect, _ := rockhopper.LoadDialect("mysql")
+db, err := rockhopper.Open("mysql", dialect, dsn, rockhopper.TableName)
+
+// Wrap an existing *sql.DB
+dialect, _ := rockhopper.LoadDialect("mysql")
+rh := rockhopper.New("mysql", dialect, existingDB, rockhopper.TableName)
+```
+
+### Running Migrations
+
+```go
+// Apply all pending migrations (pass 0 as target version to apply all)
+rockhopper.Up(ctx, db, migrations.Head(), 0)
+
+// Apply N steps
+rockhopper.UpBySteps(ctx, db, migrations.Head(), 3)
+
+// Apply all pending migrations across all packages
+rockhopper.Upgrade(ctx, db, migrations)
+
+// Apply from compiled Go migrations by package name
+rockhopper.UpgradeFromGo(ctx, db, "main", "app2")
+
+// Roll back to a specific version (pass 0 to roll back all)
+rockhopper.Down(ctx, db, migrations.Tail(), 0)
+
+// Roll back N steps
+rockhopper.DownBySteps(ctx, db, migrations.Tail(), 3)
+
+// Redo the last migration (down then up)
+rockhopper.Redo(ctx, db, lastMigration)
+
+// Align database to a specific version
+rockhopper.Align(ctx, db, versionID, migrations)
+```
+
+Migration functions accept optional callbacks that fire after each migration is applied:
+
+```go
+rockhopper.Up(ctx, db, migrations.Head(), 0, func(m *rockhopper.Migration) {
+    log.Printf("applied migration %d: %s", m.Version, m.Name)
+})
+```
+
+### Working with MigrationSlice
+
+```go
+migrations := mysqlMigrations.Migrations()
+
+// Filter by package and prepare the linked list
+filtered := migrations.FilterPackage([]string{"main", "app2"}).SortAndConnect()
+
+// Traverse
+first := filtered.Head()
+last := filtered.Tail()
+versions := filtered.Versions() // []int64
+
+// Find a specific version
+m, err := filtered.Find(20240116231445)
+
+// Group by package
+migrationMap := migrations.MapByPackage()
+```
+
+### Loading SQL Migrations at Runtime
+
+```go
+loader := rockhopper.NewSqlMigrationLoader(config)
+migrations, err := loader.Load("migrations/mysql")
+```
+
+### Registering Go Migrations
+
+For Go-based migrations (instead of SQL files), register them from `init()`:
+
+```go
+package migrations
+
+import (
+    "context"
+
+    "github.com/c9s/rockhopper/v2"
+)
+
+func init() {
+    rockhopper.AddMigration(upAddUsers, downAddUsers)
+}
+
+func upAddUsers(ctx context.Context, tx rockhopper.SQLExecutor) error {
+    _, err := tx.ExecContext(ctx, "CREATE TABLE users (id INT PRIMARY KEY, name TEXT)")
+    return err
+}
+
+func downAddUsers(ctx context.Context, tx rockhopper.SQLExecutor) error {
+    _, err := tx.ExecContext(ctx, "DROP TABLE users")
+    return err
+}
+```
+
+### Database Initialization
+
+`Touch()` automatically creates the version table if it doesn't exist, and migrates from legacy Goose tables if detected:
+
+```go
+if err := db.Touch(ctx); err != nil {
+    return err
+}
+```
+
+### Querying Migration State
+
+```go
+// Get current version for a package
+version, err := db.CurrentVersion(ctx, "main")
+
+// Load a specific migration's record from the database
+m, err := db.LoadMigration(ctx, migration)
+if m != nil && m.Record != nil && m.Record.IsApplied {
+    // migration has been applied
+}
+
+// Load all records for a package
+records, err := db.LoadMigrationRecordsByPackage(ctx, "main")
+
+// Find the last applied migration from a slice
+idx, lastApplied, err := db.FindLastAppliedMigration(ctx, migrations)
+```
+
 ## Environment Variables
 
 You can override config file values with environment variables:
 
 | Variable | Description |
 |---|---|
-| `ROCKHOPPER_DRIVER` | Database driver name (e.g. `mysql`, `sqlite3`, `postgres`) |
+| `ROCKHOPPER_DRIVER` | Database driver: `mysql`, `sqlite3`, `postgres` |
 | `ROCKHOPPER_DIALECT` | SQL dialect for query generation |
-| `ROCKHOPPER_DSN` | Data source name for database connection |
+| `ROCKHOPPER_DSN` | Data source name / connection string |
+| `ROCKHOPPER_MIGRATIONS_DIR` | Single migration directory |
+| `ROCKHOPPER_MIGRATIONS_DIRS` | Migration directories (comma-separated) |
+| `ROCKHOPPER_TABLE_NAME` | Custom version table name |
 
 Example with [dotenv](https://github.com/joho/godotenv):
 

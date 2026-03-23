@@ -18,10 +18,12 @@ func Align(ctx context.Context, db *DB, versionID int64, migrations MigrationSli
 
 	if versionID < lastAppliedMigration.Version {
 		return Down(ctx, db, lastAppliedMigration, versionID)
-	} else if lastAppliedMigration != nil && versionID > lastAppliedMigration.Version {
-		return Up(ctx, db, lastAppliedMigration.Next, versionID)
-	} else {
-		log.Infof("the migration version is already aligned to %d", versionID)
-		return nil
 	}
+
+	if versionID > lastAppliedMigration.Version {
+		return Up(ctx, db, lastAppliedMigration.Next, versionID)
+	}
+
+	log.Infof("the migration version is already aligned to %d", versionID)
+	return nil
 }

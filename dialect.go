@@ -5,6 +5,14 @@ import (
 	"fmt"
 )
 
+const (
+	DialectPostgres = "postgres"
+	DialectMySQL    = "mysql"
+	DialectSQLite3  = "sqlite3"
+	DialectRedshift = "redshift"
+	DialectTiDB     = "tidb"
+)
+
 // SQLDialect abstracts the details of specific SQL dialects
 // for goose's few SQL specific statements
 type SQLDialect interface {
@@ -26,17 +34,15 @@ type SQLDialect interface {
 
 func LoadDialect(d string) (SQLDialect, error) {
 	switch d {
-	case "postgres":
+	case DialectPostgres:
 		return &PostgresDialect{}, nil
-	case "mysql":
+	case DialectMySQL:
 		return &MySQLDialect{}, nil
-	case "sqlite3":
+	case DialectSQLite3:
 		return &Sqlite3Dialect{}, nil
-	case "mssql":
-		return &SqlServerDialect{}, nil
-	case "redshift":
+	case DialectRedshift:
 		return &RedshiftDialect{}, nil
-	case "tidb":
+	case DialectTiDB:
 		return &TiDBDialect{}, nil
 	}
 

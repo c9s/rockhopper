@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/codingconcepts/env v0.0.0-20200821220118-a8fbf8d84482
-	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/jedib0t/go-pretty/v6 v6.5.3
 	github.com/lib/pq v1.10.9
@@ -15,7 +14,6 @@ require (
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
-	github.com/ziutek/mymysql v1.5.4
 	golang.org/x/text v0.31.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -24,8 +22,6 @@ require (
 	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
-	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
-	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
