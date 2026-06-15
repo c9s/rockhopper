@@ -3,6 +3,8 @@ package rockhopper
 import (
 	"database/sql"
 	"fmt"
+
+	"github.com/c9s/rockhopper/v2/pkg/dialect"
 )
 
 const (
@@ -16,34 +18,34 @@ const (
 // SQLDialect abstracts the details of specific SQL dialects
 // for goose's few SQL specific statements
 type SQLDialect interface {
-	getTableNamesSQL() string                      // return the sql string to get the table names
-	createVersionTableSQL(tableName string) string // sql string to create the db version table
-	insertVersionSQL(tableName string) string      // sql string to insert the initial version table row
-	deleteVersionSQL(tableName string) string      // sql string to delete version
+	GetTableNamesSQL() string                      // return the sql string to get the table names
+	CreateVersionTableSQL(tableName string) string // sql string to create the db version table
+	InsertVersionSQL(tableName string) string      // sql string to insert the initial version table row
+	DeleteVersionSQL(tableName string) string      // sql string to delete version
 
-	// migrationSQL returns the sql string to retrieve migrations
-	migrationSQL(tableName string) string
+	// MigrationSQL returns the sql string to retrieve migrations
+	MigrationSQL(tableName string) string
 
-	// selectLastVersionSQL returns the sql string to get the latest version
-	selectLastVersionSQL(tableName string) string
+	// SelectLastVersionSQL returns the sql string to get the latest version
+	SelectLastVersionSQL(tableName string) string
 
-	// queryVersionsSQL returns the sql string to query the version info descending
-	queryVersionsSQL(tableName string) string
-	dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error)
+	// QueryVersionsSQL returns the sql string to query the version info descending
+	QueryVersionsSQL(tableName string) string
+	DBVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error)
 }
 
 func LoadDialect(d string) (SQLDialect, error) {
 	switch d {
 	case DialectPostgres:
-		return &PostgresDialect{}, nil
+		return &dialect.PostgresDialect{}, nil
 	case DialectMySQL:
-		return &MySQLDialect{}, nil
+		return &dialect.MySQLDialect{}, nil
 	case DialectSQLite3:
-		return &Sqlite3Dialect{}, nil
+		return &dialect.Sqlite3Dialect{}, nil
 	case DialectRedshift:
-		return &RedshiftDialect{}, nil
+		return &dialect.RedshiftDialect{}, nil
 	case DialectTiDB:
-		return &TiDBDialect{}, nil
+		return &dialect.TiDBDialect{}, nil
 	}
 
 	return nil, fmt.Errorf("%q: unknown dialect", d)

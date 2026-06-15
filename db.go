@@ -8,6 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/c9s/rockhopper/v2/pkg/dialect"
 )
 
 const (
@@ -124,7 +126,7 @@ func New(driverName string, dialect SQLDialect, db *sql.DB, tableName string) *D
 }
 
 func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.deleteVersionSQL(db.tableName), pkgName, version); err != nil {
+	if _, err := tx.ExecContext(ctx, db.dialect.DeleteVersionSQL(db.tableName), pkgName, version); err != nil {
 		return errors.Wrap(err, "failed to delete migration record")
 	}
 
@@ -132,7 +134,7 @@ func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, pkgName string,
 }
 
 func (db *DB) getTableNames(ctx context.Context) ([]string, error) {
-	q := db.dialect.getTableNamesSQL()
+	q := db.dialect.GetTableNamesSQL()
 	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
@@ -156,7 +158,7 @@ func (db *DB) getTableNames(ctx context.Context) ([]string, error) {
 }
 
 func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName, sourceFile string, version int64, applied bool) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.insertVersionSQL(db.tableName), pkgName, sourceFile, version, applied); err != nil {
+	if _, err := tx.ExecContext(ctx, db.dialect.InsertVersionSQL(db.tableName), pkgName, sourceFile, version, applied); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
 	}
 
@@ -169,7 +171,7 @@ func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName, source
 func (db *DB) LoadMigration(ctx context.Context, m *Migration) (*Migration, error) {
 	var record MigrationRecord
 
-	var q = db.dialect.migrationSQL(db.tableName)
+	var q = db.dialect.MigrationSQL(db.tableName)
 
 	row := db.QueryRowContext(ctx, q, m.Package, m.Version)
 	if err := row.Err(); err != nil {
@@ -194,7 +196,7 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 }
 
 func (db *DB) LoadMigrationRecordsByPackage(ctx context.Context, pkgName string) ([]MigrationRecord, error) {
-	rows, err := db.QueryContext(ctx, db.dialect.queryVersionsSQL(db.tableName), pkgName)
+	rows, err := db.QueryContext(ctx, db.dialect.QueryVersionsSQL(db.tableName), pkgName)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +268,7 @@ func (db *DB) upgradeCoreMigrations(_ context.Context, _ int64) error {
 // queryLatestVersion selects the latest db version of a package
 func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, error) {
 	row := db.QueryRowContext(ctx,
-		db.dialect.selectLastVersionSQL(TableName), pkgName)
+		db.dialect.SelectLastVersionSQL(TableName), pkgName)
 
 	if err := row.Err(); err != nil {
 		return 0, convertNoRowsErrToNil(err)
@@ -296,7 +298,7 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 	}
 
 	switch db.dialect.(type) {
-	case *MySQLDialect, *TiDBDialect:
+	case *dialect.MySQLDialect, *dialect.TiDBDialect:
 		if err := execAndCheckErr(tx, ctx,
 			`ALTER TABLE goose_db_version ADD COLUMN package VARCHAR(125) NOT NULL DEFAULT 'main'`); err != nil {
 			return rollbackAndLogErr(err, tx, "unable to alter table")
@@ -309,7 +311,7 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 			}
 		*/
 
-	case *PostgresDialect, *RedshiftDialect:
+	case *dialect.PostgresDialect, *dialect.RedshiftDialect:
 		if err := execAndCheckErr(tx, ctx,
 			`ALTER TABLE goose_db_version ADD COLUMN package VARCHAR(125) NOT NULL DEFAULT 'main'`); err != nil {
 			return rollbackAndLogErr(err, tx, "unable to alter table")
@@ -322,7 +324,7 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 			}
 		*/
 
-	case *Sqlite3Dialect:
+	case *dialect.Sqlite3Dialect:
 	}
 
 	if err := execAndCheckErr(tx, ctx,
@@ -370,7 +372,7 @@ func (db *DB) CurrentVersion(ctx context.Context, packageName string) (int64, er
 
 // createVersionTable creates the db version table and inserts the initial value 0 into the migration table
 func (db *DB) createVersionTable(ctx context.Context, tx SqlExecutor, initVersion int64) error {
-	if _, err := tx.ExecContext(ctx, db.dialect.createVersionTableSQL(db.tableName)); err != nil {
+	if _, err := tx.ExecContext(ctx, db.dialect.CreateVersionTableSQL(db.tableName)); err != nil {
 		return err
 	}
 
