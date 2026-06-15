@@ -590,6 +590,25 @@ Rockhopper ships with built-in [Claude Code](https://claude.ai/code) skills, so 
 
 These skills auto-discover `rockhopper_*.yaml` config files in your project root, so they work out of the box for any multi-dialect setup.
 
+### Installing the skills into your project
+
+The skills are bundled inside the `rockhopper` binary. Any project that uses rockhopper can scaffold them into its own `.claude/skills` directory with a single command:
+
+```sh
+# from the root of your project
+rockhopper skills install
+
+# list the skills bundled in the binary
+rockhopper skills list
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `-d`, `--dir` | `.` | Target project directory |
+| `-f`, `--force` | `false` | Overwrite existing skill files |
+
+`skills install` works without a config file, so you can run it before configuring rockhopper. Existing files are left untouched unless you pass `--force`. Because the skills ship inside the binary, they stay in sync with the CLI — after upgrading rockhopper, re-run `rockhopper skills install --force` to pick up the matching versions. Commit the generated `.claude/skills` directory so the whole team shares the same migration tooling.
+
 There is also a helper script `scripts/create-migration.sh` that can be used independently:
 
 ```sh
