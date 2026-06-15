@@ -1,25 +1,32 @@
-rockhopper
-======================
+<div align="center">
+
+<img src="assets/logo.png" alt="rockhopper" width="220" />
+
+# rockhopper
+
+**The AI-friendly database migration tool for Go**
+
+</div>
 
 [![Go](https://github.com/c9s/rockhopper/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/c9s/rockhopper/actions/workflows/go.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/c9s/rockhopper/v2.svg)](https://pkg.go.dev/github.com/c9s/rockhopper/v2)
 [![Go Report Card](https://goreportcard.com/badge/github.com/c9s/rockhopper/v2)](https://goreportcard.com/report/github.com/c9s/rockhopper/v2)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-D97757?logo=claude&logoColor=fff)](https://claude.ai/code)
 
-rockhopper is an embeddable migration tool written in Go, which can embed your migration files into a package with an
-easy-to-use API.
+**rockhopper** is an embeddable database migration tool written in Go. Compile your SQL migrations into a single, self-contained binary, manage schemas across MySQL, PostgreSQL, and SQLite from one consistent workflow, and let your AI assistant drive the whole thing — create, apply, and roll back migrations in plain English with built-in [Claude Code](https://claude.ai/code) skills.
 
-REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cliffs which it ascends by hopping from rock to rock.
+> 🐧 *Named after the rockhopper penguin — a small bird with a yellowish crest that scales subantarctic cliffs by hopping from rock to rock, the same way you step through migrations one version at a time.*
 
 ![Console Demo](https://raw.githubusercontent.com/c9s/rockhopper/main/screenshots/screenshot1.png)
 
-## Features
+## Why rockhopper?
 
-- Embeddable migration script — compile SQL files into Go source and ship them in a single binary
-- Package-based migration organization — group and execute migrations by package name
-- Multi-dialect support: MySQL, SQLite3, PostgreSQL
-- Compatible with [Goose](https://github.com/pressly/goose) migration format
-- Built-in [Claude Code](https://claude.ai/code) skills for AI-assisted migration management
+- 🤖 **AI-friendly by design** — ships with [Claude Code](https://claude.ai/code) skills so you can create, apply, and roll back migrations conversationally. Drop them into any project with a single `rockhopper skills install`.
+- 📦 **Truly embeddable** — compile SQL migrations into Go source and ship them *inside* your binary. No migration files to deploy, no runtime file dependencies.
+- 🗄️ **Multi-dialect** — one consistent workflow across MySQL, PostgreSQL, and SQLite3 (plus TiDB and Redshift aliases).
+- 🧩 **Package-based** — organize migrations by module and migrate each package independently.
+- 🔄 **Goose-compatible** — a familiar migration format, and it auto-migrates legacy `goose_db_version` tables for you.
+- 🛠️ **CLI or library** — drive migrations from the cobra-based CLI, or call the Go API directly at app startup.
 
 ## Core Concepts
 
