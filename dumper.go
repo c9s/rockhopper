@@ -139,42 +139,54 @@ func AddNamedMigration(packageName, filename string, up, down rockhopper.Transac
 	}
 
 	registeredGoMigrations[key] = migration
+}
+
+// AddStatementMigration registers a migration that was compiled from a .sql file.
+// The SQL statements are kept as data (rather than baked into a function body) so
+// the console can preview each statement while the migration runs.
+func AddStatementMigration(packageName string, version int64, source string, useTx bool, upStatements, downStatements []rockhopper.Statement) {
+	migration := &rockhopper.Migration{
+		Package:    packageName,
+		Registered: true,
+
+		Version: version,
+		Source:  source,
+		UseTx:   useTx,
+
+		UpStatements:   upStatements,
+		DownStatements: downStatements,
+	}
+
+	key := rockhopper.RegistryKey{ Package: packageName, Version: version}
+	if existing, ok := registeredGoMigrations[key]; ok {
+		panic(fmt.Sprintf("failed to add migration %q: version conflicts with key %+v: %+v", source, key, existing))
+	}
+
+	registeredGoMigrations[key] = migration
 }`))
 
 var migrationTemplate = template.Must(template.New("cmd.go-migration").Funcs(templateFuncs).Parse(`package {{.PackageName}}
 
 import (
-	"context"
-
 	"github.com/c9s/rockhopper/v2"
 )
 
+// This migration was compiled from {{ .Migration.Source }}.
+// The SQL statements are registered as data so they can be previewed in the
+// console while the migration runs, exactly like a raw .sql migration.
 func init() {
-	AddMigration({{ .Migration.Package | quote }}, up{{ .FuncNameBody }}, down{{ .FuncNameBody }})
-}
-
-func up{{ .FuncNameBody }}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
-	// This code is executed when the migration is applied.
+	AddStatementMigration({{ .Migration.Package | quote }}, {{ .Migration.Version }}, {{ .Migration.Source | quote }}, {{ .Migration.UseTx }},
+		[]rockhopper.Statement{
 {{- range .Migration.UpStatements }}
-	_, err = tx.ExecContext(ctx, {{ .SQL | quote }})
-	if err != nil {
-		return err
-	}
-
+			{Direction: rockhopper.DirectionUp, SQL: {{ .SQL | quote }}},
 {{- end }}
-	return err
-}
-
-func down{{ .FuncNameBody }}(ctx context.Context, tx rockhopper.SQLExecutor) (err error) {
-	// This code is executed when the migration is rolled back.
+		},
+		[]rockhopper.Statement{
 {{- range .Migration.DownStatements }}
-	_, err = tx.ExecContext(ctx, {{ .SQL | quote }})
-	if err != nil {
-		return err
-	}
-
+			{Direction: rockhopper.DirectionDown, SQL: {{ .SQL | quote }}},
 {{- end }}
-	return err
+		},
+	)
 }`))
 
 type apiTemplateArgs struct {
@@ -201,13 +213,6 @@ func renderTemplateAndGoFormat(tpl *template.Template, a interface{}) ([]byte, e
 }
 
 type migrationTemplateArgs struct {
-	FuncNameBody string
-
-	CamelName string
-
-	// BaseName is the file basename of the migration script.
-	BaseName string
-
 	// Migration is the Migration metadata object
 	Migration *Migration
 
@@ -219,13 +224,9 @@ var specialCharsRegExp = regexp.MustCompile(`\W`)
 
 func renderMigration(packageName string, m *Migration) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
-	funcNameBody := "_" + specialCharsRegExp.ReplaceAllLiteralString(m.Package+"_"+toCamelCase(m.Name), "_")
 	err := migrationTemplate.Execute(buf, migrationTemplateArgs{
-		FuncNameBody: funcNameBody,
-		CamelName:    strings.ToTitle(toCamelCase(m.Name)),
-		BaseName:     filepath.Base(m.Source),
-		Migration:    m,
-		PackageName:  packageName,
+		Migration:   m,
+		PackageName: packageName,
 	})
 
 	if err != nil {

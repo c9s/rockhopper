@@ -14,7 +14,7 @@ func TestGetMigrationsMap(t *testing.T) {
 }
 
 func TestMergeMigrationsMap(t *testing.T) {
-	MergeMigrationsMap(map[registryKey]*rockhopper.Migration{
+	MergeMigrationsMap(map[rockhopper.RegistryKey]*rockhopper.Migration{
 		{Version: 2}: {},
 		{Version: 3}: {},
 	})
