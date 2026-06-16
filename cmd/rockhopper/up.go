@@ -14,6 +14,7 @@ var log = logrus.WithField("application", "rockhopper")
 func init() {
 	UpCmd.Flags().Int64("to", 0, "up to a specific version")
 	UpCmd.Flags().Int("steps", 0, "run upgrade by steps")
+	UpCmd.Flags().Bool("allow-out-of-order", false, "apply pending migrations whose version is below an already-applied migration")
 	rootCmd.AddCommand(UpCmd)
 }
 
@@ -40,6 +41,11 @@ func up(cmd *cobra.Command, args []string) error {
 	}
 
 	to, err := cmd.Flags().GetInt64("to")
+	if err != nil {
+		return err
+	}
+
+	allowOutOfOrder, err := cmd.Flags().GetBool("allow-out-of-order")
 	if err != nil {
 		return err
 	}
@@ -78,35 +84,57 @@ func up(cmd *cobra.Command, args []string) error {
 	migrationMap = migrationMap.SortAndConnect()
 
 	for pkgName, migrations := range migrationMap {
-		_ = pkgName
-
-		_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, migrations)
+		status, err := db.InspectMigrations(ctx, migrations)
 		if err != nil {
 			return err
 		}
 
-		startMigration := migrations.Head()
-		if lastAppliedMigration != nil {
-			startMigration = lastAppliedMigration.Next
-		}
-
-		if steps > 0 {
-			err = rockhopper.UpBySteps(ctx, db, startMigration, steps, func(m *rockhopper.Migration) {
-				// log.Infof("migration %v is applied", m.Version)
-			})
-			if err != nil {
-				return err
+		if len(status.OutOfOrder) > 0 {
+			if !allowOutOfOrder {
+				return &rockhopper.OutOfOrderError{
+					Package:               pkgName,
+					HighestAppliedVersion: status.HighestAppliedVersion,
+					Migrations:            status.OutOfOrder,
+				}
 			}
-		} else {
-			err = rockhopper.Up(ctx, db, startMigration, to, func(m *rockhopper.Migration) {
-				// log.Infof("migration %d is applied", m.Version)
-			})
-			if err != nil {
-				return err
+
+			for _, m := range status.OutOfOrder {
+				log.Warnf("applying out-of-order migration %d (%s); it is older than the already-applied version %d",
+					m.Version, m.Source, status.HighestAppliedVersion)
 			}
 		}
 
+		target := selectPending(status.Pending, steps, to)
+		if err := rockhopper.UpMigrations(ctx, db, target); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+// selectPending narrows the pending migrations down to those that should be applied
+// for this run. steps takes precedence over to: with steps > 0 it returns at most
+// that many migrations; otherwise with to > 0 it returns those at or below the
+// target version. The slice is assumed to be in ascending version order.
+func selectPending(pending rockhopper.MigrationSlice, steps int, to int64) rockhopper.MigrationSlice {
+	if steps > 0 {
+		if steps < len(pending) {
+			return pending[:steps]
+		}
+		return pending
+	}
+
+	if to > 0 {
+		var selected rockhopper.MigrationSlice
+		for _, m := range pending {
+			if m.Version > to {
+				break
+			}
+			selected = append(selected, m)
+		}
+		return selected
+	}
+
+	return pending
 }

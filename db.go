@@ -439,3 +439,54 @@ func (db *DB) FindLastAppliedMigration(
 
 	return -1, nil, nil
 }
+
+// MigrationStatus summarizes the applied state of a set of migrations.
+type MigrationStatus struct {
+	// Pending holds the migrations that have not been applied yet, in the order
+	// they appear in the inspected slice (ascending version when sorted).
+	Pending MigrationSlice
+
+	// OutOfOrder holds the subset of Pending whose version is lower than the
+	// highest already-applied version. A resume-from-last-applied upgrade walks
+	// forward from the last applied migration and would silently skip these.
+	OutOfOrder MigrationSlice
+
+	// HighestAppliedVersion is the highest version that has been applied, or 0
+	// when nothing has been applied yet.
+	HighestAppliedVersion int64
+}
+
+// InspectMigrations loads the applied state for every migration in the slice and
+// reports which migrations are pending and which of those are out of order. The
+// slice is expected to be sorted in ascending version order (as produced by
+// SortAndConnect); detection itself does not depend on the ordering.
+func (db *DB) InspectMigrations(ctx context.Context, migrations MigrationSlice) (*MigrationStatus, error) {
+	status := &MigrationStatus{}
+
+	for _, m := range migrations {
+		// reset any stale record before loading so a not-found lookup is treated as pending
+		m.Record = nil
+
+		if _, err := db.LoadMigration(ctx, m); err != nil {
+			return nil, err
+		}
+
+		if m.Record != nil && m.Record.IsApplied && m.Version > status.HighestAppliedVersion {
+			status.HighestAppliedVersion = m.Version
+		}
+	}
+
+	for _, m := range migrations {
+		if m.Record != nil && m.Record.IsApplied {
+			continue
+		}
+
+		status.Pending = append(status.Pending, m)
+
+		if m.Version < status.HighestAppliedVersion {
+			status.OutOfOrder = append(status.OutOfOrder, m)
+		}
+	}
+
+	return status, nil
+}
