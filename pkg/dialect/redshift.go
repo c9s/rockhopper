@@ -1,43 +1,42 @@
-package rockhopper
+package dialect
 
 import (
 	"database/sql"
 	"fmt"
 )
 
-// PostgresDialect struct.
-type PostgresDialect struct{}
+// RedshiftDialect struct.
+type RedshiftDialect struct{}
 
-func (d PostgresDialect) getTableNamesSQL() string {
-	return `SELECT table_name FROM information_schema.tables 
-		WHERE table_type = 'BASE TABLE' AND table_schema = 'public'`
+func (d RedshiftDialect) GetTableNamesSQL() string {
+	return `SELECT DISTINCT tablename FROM PG_TABLE_DEF WHERE schemaname = 'public'`
 }
 
-func (d PostgresDialect) createVersionTableSQL(tableName string) string {
-	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-            	id serial NOT NULL,
-            	package VARCHAR(128) NOT NULL DEFAULT 'main',
+func (d RedshiftDialect) CreateVersionTableSQL(tableName string) string {
+	return fmt.Sprintf(`CREATE TABLE %s (
+            	id INTEGER NOT NULL identity(1, 1),
+                package VARCHAR(128) NOT NULL DEFAULT 'main',
             	source_file VARCHAR(255) NOT NULL DEFAULT '',
                 version_id BIGINT NOT NULL,
                 is_applied BOOLEAN NOT NULL,
-                tstamp TIMESTAMP NULL DEFAULT NOW(),
+                tstamp TIMESTAMP NULL default sysdate,
                 PRIMARY KEY(id)
             );`, tableName)
 }
 
-func (d PostgresDialect) insertVersionSQL(tableName string) string {
+func (d RedshiftDialect) InsertVersionSQL(tableName string) string {
 	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES ($1, $2, $3, $4)", tableName)
 }
 
-func (d PostgresDialect) selectLastVersionSQL(tableName string) string {
+func (d RedshiftDialect) SelectLastVersionSQL(tableName string) string {
 	return fmt.Sprintf("SELECT MAX(version_id) FROM %s WHERE package = $1", tableName)
 }
 
-func (d PostgresDialect) queryVersionsSQL(tableName string) string {
+func (d RedshiftDialect) QueryVersionsSQL(tableName string) string {
 	return fmt.Sprintf("SELECT package, version_id, is_applied, tstamp FROM %s WHERE package = $1 ORDER BY id DESC", tableName)
 }
 
-func (d PostgresDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
+func (d RedshiftDialect) DBVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
 	rows, err := db.Query(fmt.Sprintf("SELECT package, version_id, is_applied from %s ORDER BY id DESC", tableName))
 	if err != nil {
 		return nil, err
@@ -46,10 +45,10 @@ func (d PostgresDialect) dbVersionQuery(db *sql.DB, tableName string) (*sql.Rows
 	return rows, err
 }
 
-func (d PostgresDialect) migrationSQL(tableName string) string {
+func (d RedshiftDialect) MigrationSQL(tableName string) string {
 	return fmt.Sprintf("SELECT id, tstamp, is_applied FROM %s WHERE package = $1 AND version_id = $2 ORDER BY tstamp DESC LIMIT 1", tableName)
 }
 
-func (d PostgresDialect) deleteVersionSQL(tableName string) string {
+func (d RedshiftDialect) DeleteVersionSQL(tableName string) string {
 	return fmt.Sprintf("DELETE FROM %s WHERE package = $1 AND version_id = $2", tableName)
 }
