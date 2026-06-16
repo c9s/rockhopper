@@ -106,6 +106,20 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 			// make it goose compatible, replace +goose Up to just +up
 			cmd = strings.ToLower(strings.ReplaceAll(cmd, "+goose ", "+"))
 
+			// normalize the remaining goose-style annotations to their
+			// rockhopper equivalents so goose migration files parse as-is:
+			//   -- +goose StatementBegin  -> -- +begin
+			//   -- +goose StatementEnd    -> -- +end
+			//   -- +goose NO TRANSACTION  -> -- !txn
+			switch cmd {
+			case "+statementbegin":
+				cmd = "+begin"
+			case "+statementend":
+				cmd = "+end"
+			case "+no transaction":
+				cmd = "!txn"
+			}
+
 			if strings.HasPrefix(cmd, "@package") {
 				packageName, err := matchPackageName(line)
 				if err != nil {

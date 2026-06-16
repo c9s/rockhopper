@@ -19,6 +19,32 @@
 
 ![Console Demo](https://raw.githubusercontent.com/c9s/rockhopper/main/screenshots/screenshot1.png)
 
+## Table of Contents
+
+- [Why rockhopper?](#why-rockhopper)
+- [Core Concepts](#core-concepts)
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [CLI Commands](#cli-commands)
+  - [`up` — Apply pending migrations](#up--apply-pending-migrations)
+  - [`down` — Roll back migrations](#down--roll-back-migrations)
+  - [`redo` — Redo the last migration](#redo--redo-the-last-migration)
+  - [`status` — Show migration status](#status--show-migration-status)
+  - [`version` — Print the version](#version--print-the-version)
+  - [`create` — Create a new migration file](#create--create-a-new-migration-file)
+  - [`compile` — Compile SQL migrations into Go](#compile--compile-sql-migrations-into-go)
+  - [`align` — Align migration version](#align--align-migration-version)
+- [Configuration](#configuration)
+- [SQL Migration Format](#sql-migration-format)
+- [Multi-Dialect Workflow](#multi-dialect-workflow)
+- [Compiling Migrations into Go](#compiling-migrations-into-go)
+- [Go API](#go-api)
+- [Environment Variables](#environment-variables)
+- [Claude Code Support](#claude-code-support)
+- [Migrating from Goose](#migrating-from-goose)
+- [Credit](#credit)
+- [License](#license)
+
 ## Why rockhopper?
 
 - 🤖 **AI-friendly by design** — ships with [Claude Code](https://claude.ai/code) skills so you can create, apply, and roll back migrations conversationally. Drop them into any project with a single `rockhopper skills install`.
@@ -647,6 +673,122 @@ bash scripts/create-migration.sh add_pnl_column
 # Specify migration type
 bash scripts/create-migration.sh -t sql add_trades_table
 ```
+
+## Migrating from Goose
+
+Rockhopper was forked from [goose](https://github.com/pressly/goose), so moving
+an existing goose project over is mostly mechanical — and in many cases your
+migration files already work unchanged.
+
+### 1. The version table migrates itself
+
+On the first run, `Touch()` (called automatically by every CLI command) detects a
+legacy `goose_db_version` table, adds a `package` column defaulting to `main`, and
+renames it to `rockhopper_versions`. Your applied-version history is preserved, so
+**already-applied migrations are not re-run** — rockhopper picks up exactly where
+goose left off. No manual data copy is needed.
+
+> Take a database backup before the first run, as with any schema change.
+
+### 2. Filenames are already compatible
+
+Goose's default timestamp filenames (`20170506082420_add_some_column.sql`) match
+rockhopper's format exactly — no renaming required. (Rockhopper does not have an
+equivalent of goose's sequential `-s` / `fix` numbering; it always orders by the
+timestamp version ID.)
+
+### 3. SQL annotations work as-is
+
+Rockhopper's parser understands goose's annotation syntax directly, so most goose
+migration files run **without any edits**. Each goose annotation maps to a
+rockhopper one:
+
+| Goose | Rockhopper equivalent | Parsed directly? |
+|---|---|---|
+| `-- +goose Up` | `-- +up` | ✅ yes |
+| `-- +goose Down` | `-- +down` | ✅ yes |
+| `-- +goose StatementBegin` | `-- +begin` | ✅ yes |
+| `-- +goose StatementEnd` | `-- +end` | ✅ yes |
+| `-- +goose NO TRANSACTION` | `-- !txn` | ✅ yes |
+| `-- +goose ENVSUB ON/OFF` | *(not supported)* | ❌ ignored |
+
+The only unsupported annotation is `ENVSUB` (goose's environment-variable
+substitution); files using it need those values inlined.
+
+You can keep the goose annotations or convert them to rockhopper's shorter native
+form — both parse identically. To normalize a directory:
+
+```sh
+sed -i '' \
+  -e 's/-- +goose Up/-- +up/g' \
+  -e 's/-- +goose Down/-- +down/g' \
+  -e 's/-- +goose StatementBegin/-- +begin/g' \
+  -e 's/-- +goose StatementEnd/-- +end/g' \
+  -e 's/-- +goose NO TRANSACTION/-- !txn/g' \
+  migrations/*.sql
+```
+
+Rockhopper also adds `-- @package <name>` for grouping migrations into independent
+packages — a concept goose doesn't have. Existing files default to the `main`
+package, which matches the column default used during the table migration.
+
+### 4. Map the CLI commands
+
+| Goose | Rockhopper |
+|---|---|
+| `goose up` | `rockhopper up` |
+| `goose up-by-one` | `rockhopper up --steps 1` |
+| `goose up-to VERSION` | `rockhopper up --to VERSION` |
+| `goose down` | `rockhopper down` |
+| `goose down-to VERSION` | `rockhopper down --to VERSION` |
+| `goose reset` | `rockhopper down --all` |
+| `goose redo` | `rockhopper redo` |
+| `goose status` | `rockhopper status` |
+| `goose create NAME sql` | `rockhopper create -t sql NAME` |
+| `goose up -allow-missing` | `rockhopper up --allow-out-of-order` |
+| `goose version` | `rockhopper status` ¹ |
+| `goose validate` | *(not yet available)* |
+| `goose fix` | *(no equivalent — timestamps only)* |
+
+¹ Note: `rockhopper version` prints the **build** version of the CLI, not the
+current database schema version. Use `rockhopper status` to see the applied
+version per package.
+
+Where goose takes connection settings as flags/env vars, rockhopper reads them
+from `rockhopper.yaml` (see [Configuration](#configuration)). The `-table` flag
+maps to the library's table-name argument; the CLI always uses
+`rockhopper_versions`.
+
+### 5. Update Go-based migrations
+
+The registration call is the same name, but the function signature changed: goose
+passes a `*sql.Tx`, while rockhopper passes a `context.Context` and a
+`rockhopper.SQLExecutor`:
+
+```go
+// goose
+func init() { goose.AddMigration(Up, Down) }
+func Up(tx *sql.Tx) error   { _, err := tx.Exec("...");                return err }
+func Down(tx *sql.Tx) error { _, err := tx.Exec("...");                return err }
+
+// rockhopper
+func init() { rockhopper.AddMigration(up, down) }
+func up(ctx context.Context, tx rockhopper.SQLExecutor) error   { _, err := tx.ExecContext(ctx, "..."); return err }
+func down(ctx context.Context, tx rockhopper.SQLExecutor) error { _, err := tx.ExecContext(ctx, "..."); return err }
+```
+
+Also swap the import path from `github.com/pressly/goose/v3` to
+`github.com/c9s/rockhopper/v2`.
+
+### Checklist
+
+- [ ] Back up the database.
+- [ ] Add a `rockhopper.yaml` with your driver, dialect, DSN, and `migrationsDirs`.
+- [ ] (Optional) Normalize goose annotations to rockhopper's native form — they
+      parse either way, except `ENVSUB`, which must be inlined.
+- [ ] Update any Go migrations to the `(ctx, SQLExecutor)` signature and import path.
+- [ ] Run `rockhopper status` to confirm the table migrated and history is intact.
+- [ ] Run `rockhopper up` to apply anything still pending.
 
 ## Credit
 

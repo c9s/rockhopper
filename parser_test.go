@@ -79,6 +79,50 @@ func TestMigrationParser_ParseBytes(t *testing.T) {
 	}
 }
 
+func TestMigrationParser_GooseAnnotations(t *testing.T) {
+	p := &MigrationParser{}
+
+	t.Run("up and down", func(t *testing.T) {
+		goose := "-- +goose Up\nCREATE TABLE post (id int);\n-- +goose Down\nDROP TABLE post;\n"
+		native := "-- +up\nCREATE TABLE post (id int);\n-- +down\nDROP TABLE post;\n"
+
+		g, err := p.ParseString(goose)
+		assert.NoError(t, err)
+		n, err := p.ParseString(native)
+		assert.NoError(t, err)
+		assert.Equal(t, n, g, "goose Up/Down should parse the same as native +up/+down")
+	})
+
+	t.Run("statement begin and end", func(t *testing.T) {
+		goose := "-- +goose Up\n-- +goose StatementBegin\nCREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;\n-- +goose StatementEnd\n"
+		native := "-- +up\n-- +begin\nCREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;\n-- +end\n"
+
+		g, err := p.ParseString(goose)
+		assert.NoError(t, err)
+		n, err := p.ParseString(native)
+		assert.NoError(t, err)
+
+		assert.Equal(t, n, g, "goose StatementBegin/StatementEnd should parse the same as native +begin/+end")
+		// the whole multi-statement block must be captured as a single statement
+		if assert.Len(t, g.UpStmts, 1) {
+			assert.Contains(t, g.UpStmts[0].SQL, "END; $$ LANGUAGE plpgsql;")
+		}
+	})
+
+	t.Run("no transaction", func(t *testing.T) {
+		goose := "-- +goose NO TRANSACTION\n-- +goose Up\nCREATE INDEX CONCURRENTLY idx ON t (c);\n"
+		native := "-- !txn\n-- +up\nCREATE INDEX CONCURRENTLY idx ON t (c);\n"
+
+		g, err := p.ParseString(goose)
+		assert.NoError(t, err)
+		n, err := p.ParseString(native)
+		assert.NoError(t, err)
+
+		assert.Equal(t, n, g, "goose NO TRANSACTION should parse the same as native !txn")
+		assert.False(t, g.UseTx, "NO TRANSACTION should disable transaction wrapping")
+	})
+}
+
 func Test_matchPackageName(t *testing.T) {
 	t.Run("simple", func(t *testing.T) {
 		pkgName, err := matchPackageName("@package main")
