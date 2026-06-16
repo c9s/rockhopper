@@ -19,6 +19,32 @@
 
 ![Console Demo](https://raw.githubusercontent.com/c9s/rockhopper/main/screenshots/screenshot1.png)
 
+## Table of Contents
+
+- [Why rockhopper?](#why-rockhopper)
+- [Core Concepts](#core-concepts)
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [CLI Commands](#cli-commands)
+  - [`up` — Apply pending migrations](#up--apply-pending-migrations)
+  - [`down` — Roll back migrations](#down--roll-back-migrations)
+  - [`redo` — Redo the last migration](#redo--redo-the-last-migration)
+  - [`status` — Show migration status](#status--show-migration-status)
+  - [`version` — Print the version](#version--print-the-version)
+  - [`create` — Create a new migration file](#create--create-a-new-migration-file)
+  - [`compile` — Compile SQL migrations into Go](#compile--compile-sql-migrations-into-go)
+  - [`align` — Align migration version](#align--align-migration-version)
+- [Configuration](#configuration)
+- [SQL Migration Format](#sql-migration-format)
+- [Multi-Dialect Workflow](#multi-dialect-workflow)
+- [Compiling Migrations into Go](#compiling-migrations-into-go)
+- [Go API](#go-api)
+- [Environment Variables](#environment-variables)
+- [Claude Code Support](#claude-code-support)
+- [Migrating from Goose](#migrating-from-goose)
+- [Credit](#credit)
+- [License](#license)
+
 ## Why rockhopper?
 
 - 🤖 **AI-friendly by design** — ships with [Claude Code](https://claude.ai/code) skills so you can create, apply, and roll back migrations conversationally. Drop them into any project with a single `rockhopper skills install`.
