@@ -21,6 +21,22 @@ REF: a small penguin with a yellowish crest, breeding on subantarctic coastal cl
 - Compatible with [Goose](https://github.com/pressly/goose) migration format
 - Built-in [Claude Code](https://claude.ai/code) skills for AI-assisted migration management
 
+## Core Concepts
+
+A few ideas explain how rockhopper behaves. Skim these once and the commands below will make sense.
+
+- **Migrations & version IDs** — A migration is a single SQL (or Go) file describing one schema change. Its filename starts with a timestamp (`20240116231445_add_trades_table.sql`); that number is its **version ID**. Rockhopper always applies migrations in ascending version order, so newer changes never run before older ones.
+
+- **Up and down** — Every migration has an `-- +up` block (what to apply) and an optional `-- +down` block (how to undo it). `up` rolls the schema forward; `down` rolls it back.
+
+- **Version tracking table** — Rockhopper records which versions have been applied in a table named `rockhopper_versions`. It creates this table automatically on first run (and transparently migrates from a legacy Goose `goose_db_version` table if it finds one), so it always knows what's pending versus already applied.
+
+- **Packages** — Migrations can be grouped into named **packages** (via `-- @package <name>`, default `main`). Each package tracks its own current version and is migrated independently. This lets a modular application keep, say, a `billing` module's migrations separate from a `users` module's.
+
+- **Dialects** — Rockhopper generates its bookkeeping SQL per database dialect (MySQL, PostgreSQL, SQLite3, and the TiDB/Redshift aliases). Your own migration SQL is dialect-specific too, which is why multi-database projects keep one migration directory per dialect (see [Multi-Dialect Workflow](#multi-dialect-workflow)).
+
+- **Embedding** — `rockhopper compile` turns your SQL files into Go source. You can then ship migrations *inside* your binary and run them at startup with no migration files on disk (see [Compiling Migrations into Go](#compiling-migrations-into-go)).
+
 ## Install
 
 ```sh
@@ -29,38 +45,41 @@ go install github.com/c9s/rockhopper/v2/cmd/rockhopper@v2.0.7
 
 ## Quick Start
 
-Create a config file `rockhopper.yaml`:
+**1. Configure.** Rockhopper looks for `rockhopper.yaml` in the current directory by default. Tell it how to reach your database and where your migration files live:
 
 ```yaml
 ---
-driver: mysql
-dialect: mysql
+driver: mysql      # mysql | postgres | sqlite3
+dialect: mysql     # SQL dialect (defaults to driver if omitted)
 dsn: "root@tcp(localhost:3306)/rockhopper?parseTime=true"
-package: myapp
-migrationsDirs:
+package: myapp     # default package name for new migrations
+migrationsDirs:    # one or more directories rockhopper scans for migrations
 - migrations/module1
 - migrations/module2
 ```
 
-Create directories for your migration files:
+**2. Create the migration directories** referenced above:
 
 ```sh
 mkdir -p migrations/{module1,module2}
 ```
 
-Create a new migration:
+**3. Generate a migration file.** This writes an empty, timestamped template you then fill in:
 
 ```sh
 rockhopper create -t sql --output migrations/module1 add_trades_table
+# -> migrations/module1/20240116231445_add_trades_table.sql
 ```
 
-Edit the generated migration file (see [SQL Migration Format](#sql-migration-format) below), then apply:
+**4. Edit the file** to add your `-- +up` and `-- +down` SQL (see [SQL Migration Format](#sql-migration-format)).
+
+**5. Apply pending migrations.** Rockhopper applies everything not yet recorded in the version table, in version order:
 
 ```sh
 rockhopper up
 ```
 
-Check migration status:
+**6. Inspect what happened** at any time with `status`:
 
 ```sh
 rockhopper status
@@ -139,8 +158,21 @@ rockhopper redo
 
 ### `status` — Show migration status
 
+Lists every known migration per package and whether it has been applied:
+
 ```sh
 rockhopper status
+```
+
+In the output, the **Applied At** column shows the timestamp when a migration ran (or `Pending` if it hasn't), and the **Current** column marks each package's current version with `*` (all other rows show `-`).
+
+### `version` — Print the version
+
+Prints the rockhopper build version, commit, and build time. This command works without a config file:
+
+```sh
+rockhopper version
+# rockhopper v2.0.7 (commit abc1234, built 2024-01-19T12:00:00Z)
 ```
 
 ### `create` — Create a new migration file
@@ -199,7 +231,6 @@ driver: mysql                    # Database driver: mysql, sqlite3, postgres
 dialect: mysql                   # SQL dialect (defaults to driver if omitted)
 dsn: "root@tcp(localhost:3306)/mydb?parseTime=true"
 package: myapp                   # Default package name (defaults to "main")
-tableName: rockhopper_versions   # Version table name (defaults to "rockhopper_versions")
 migrationsDirs:                  # List of migration directories
 - migrations/module1
 - migrations/module2
@@ -214,10 +245,11 @@ includePackages:                 # Optional: only include these packages
 | `dialect` | same as driver | SQL dialect for query generation. Also supports `tidb` (uses mysql) and `redshift` (uses postgres) |
 | `dsn` | | Data source name / connection string |
 | `package` | `main` | Default migration package name |
-| `tableName` | `rockhopper_versions` | Migration version table name |
 | `migrationsDir` | `migrations` | Single migration directory (use `migrationsDirs` for multiple) |
 | `migrationsDirs` | | List of migration directories |
 | `includePackages` | all | Whitelist of packages to include when loading migrations |
+
+> The version-tracking table is always named `rockhopper_versions` when using the CLI. To use a custom table name, call the library's `Open` / `New` functions directly and pass your own name (see [Go API](#go-api)).
 
 ## SQL Migration Format
 
