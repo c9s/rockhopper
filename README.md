@@ -130,15 +130,37 @@ rockhopper redo
 ### `up` — Apply pending migrations
 
 ```sh
-rockhopper up                # apply all pending migrations
-rockhopper up --steps 3      # apply the next 3 pending migrations
-rockhopper up --to 20240117  # apply up to a specific version
+rockhopper up                       # apply all pending migrations
+rockhopper up --steps 3             # apply the next 3 pending migrations
+rockhopper up --to 20240117         # apply up to a specific version
+rockhopper up --allow-out-of-order  # also apply pending migrations older than the latest applied
 ```
 
 | Flag | Description |
 |---|---|
 | `--steps` | Number of migrations to apply |
 | `--to` | Target version to migrate up to |
+| `--allow-out-of-order` | Apply pending migrations whose version is below an already-applied migration |
+
+#### Out-of-order migrations
+
+When you work on parallel branches, a teammate can merge a migration with a
+timestamp *lower* than one you have already applied. By default `up` **refuses**
+to run in this situation and lists the offending files, because a normal upgrade
+walks forward from the last applied migration and would silently skip them:
+
+```
+out-of-order migrations detected in package "main": the following are pending but
+have a lower version than the highest applied migration (20240103000000), so a
+normal upgrade would silently skip them:
+  - 20240102000000  migrations/20240102000000_b.sql
+re-run with --allow-out-of-order to apply them anyway, or renumber them above the latest applied version
+```
+
+You then have two choices:
+
+- **Renumber** the new migration so its version is above the latest applied one (the safe default — history stays linear).
+- **Apply it in place** with `rockhopper up --allow-out-of-order`. Rockhopper warns for each out-of-order migration and applies it. Use this only when the older migration is independent of the newer ones, since it changes the applied order.
 
 ### `down` — Roll back migrations
 

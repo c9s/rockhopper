@@ -4,6 +4,34 @@ import (
 	"context"
 )
 
+// UpMigrations applies the given migrations in slice order. The migrations are
+// expected to be pending (not yet applied) and sorted in ascending version order;
+// any migration already marked as applied is skipped defensively.
+//
+// Unlike Up, which walks the Next linked-list pointers starting from a single
+// migration, UpMigrations applies exactly the migrations in the slice. This makes
+// it possible to apply out-of-order migrations — pending migrations whose version
+// is lower than an already-applied one — which a Next-pointer walk would skip.
+func UpMigrations(ctx context.Context, db *DB, migrations MigrationSlice, callbacks ...func(m *Migration)) error {
+	for _, m := range migrations {
+		if m.Record != nil && m.Record.IsApplied {
+			continue
+		}
+
+		descMigration("upgrading", m)
+
+		if err := m.Up(ctx, db); err != nil {
+			return err
+		}
+
+		for _, cb := range callbacks {
+			cb(m)
+		}
+	}
+
+	return nil
+}
+
 func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks ...func(m *Migration)) error {
 	for ; steps > 0 && m != nil; m = m.Next {
 		descMigration("upgrading", m)
