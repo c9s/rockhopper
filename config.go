@@ -30,6 +30,16 @@ func LoadConfig(configFile string) (*Config, error) {
 		return nil, err
 	}
 
+	// Expand environment variables referenced in the config file before parsing,
+	// so values can be pulled from the environment, e.g.:
+	//
+	//   dsn: ${MYSQL8_URL}
+	//   dsn: $MYSQL8_URL
+	//
+	// Both $VAR and ${VAR} forms are supported. Undefined variables expand to an
+	// empty string (same as os.ExpandEnv). A literal '$' can be escaped as '$$'.
+	data = []byte(expandEnv(string(data)))
+
 	var config Config
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, err
@@ -44,4 +54,18 @@ func LoadConfig(configFile string) (*Config, error) {
 	}
 
 	return &config, err
+}
+
+// expandEnv replaces $VAR and ${VAR} references in s with the values of the
+// corresponding environment variables. It behaves like os.ExpandEnv, with one
+// addition: "$$" expands to a literal "$" so values that legitimately contain a
+// dollar sign (e.g. a password) can be escaped.
+func expandEnv(s string) string {
+	return os.Expand(s, func(name string) string {
+		if name == "$" {
+			return "$"
+		}
+
+		return os.Getenv(name)
+	})
 }

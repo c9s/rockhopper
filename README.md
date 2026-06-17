@@ -306,6 +306,35 @@ includePackages:                 # Optional: only include these packages
 
 > The version-tracking table is always named `rockhopper_versions` when using the CLI. To use a custom table name, call the library's `Open` / `New` functions directly and pass your own name (see [Go API](#go-api)).
 
+### Environment variables in the config file
+
+Values in the config file may reference environment variables using `$VAR` or
+`${VAR}` syntax. They are expanded when the file is loaded, which is handy for
+keeping connection strings and secrets out of version control:
+
+```yaml
+---
+driver: mysql
+dialect: mysql
+dsn: ${MYSQL8_URL}        # expanded from the MYSQL8_URL environment variable
+migrationsDirs:
+- migrations/myapp
+```
+
+```sh
+export MYSQL8_URL="root:secret@tcp(localhost:3306)/myapp?parseTime=true"
+rockhopper up
+```
+
+Notes:
+
+- Both `${VAR}` and bare `$VAR` are supported.
+- An undefined variable expands to an empty string.
+- To keep a literal dollar sign in a value (e.g. inside a password), write `$$`.
+- This is independent of the `ROCKHOPPER_*` overrides below: if both are set,
+  the `ROCKHOPPER_*` environment variable still takes precedence over the file
+  value (see [Environment Variables](#environment-variables)).
+
 ## SQL Migration Format
 
 A simple migration:
