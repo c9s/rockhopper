@@ -43,23 +43,44 @@ func buildMySqlDSN() (string, error) {
 		}
 	}
 
-	address := ""
-	if v, ok := os.LookupEnv(prefix + "HOST"); ok {
-		address = v
+	// Separate the credentials from the address with '@', per the go-sql-driver
+	// DSN format user:pass@protocol(address)/dbname. Only add it when some
+	// credentials were provided; otherwise the DSN starts with the protocol.
+	if dsn != "" {
+		dsn += "@"
 	}
 
-	if v, ok := os.LookupEnv(prefix + "PORT"); ok {
-		address += ":" + v
-	}
-
-	if v, ok := os.LookupEnv(prefix + "PROTOCOL"); ok {
-		dsn += v + "(" + address + ")"
+	// MYSQL_UNIX_PORT is the standard MySQL environment variable for the Unix
+	// socket file path. When set, connect over the socket, e.g.:
+	//
+	//   root:pass@unix(/opt/local/var/run/mysql8/mysqld.sock)/test
+	//
+	// It takes precedence over HOST/PORT/PROTOCOL, mirroring how the MySQL
+	// client tools prefer the socket when one is configured.
+	if socket, ok := os.LookupEnv(prefix + "UNIX_PORT"); ok {
+		dsn += "unix(" + socket + ")"
 	} else {
-		dsn += "tcp(" + address + ")"
+		address := ""
+		if v, ok := os.LookupEnv(prefix + "HOST"); ok {
+			address = v
+		}
+
+		if v, ok := os.LookupEnv(prefix + "PORT"); ok {
+			address += ":" + v
+		}
+
+		if v, ok := os.LookupEnv(prefix + "PROTOCOL"); ok {
+			dsn += v + "(" + address + ")"
+		} else {
+			dsn += "tcp(" + address + ")"
+		}
 	}
 
+	// The slash separating the database name is always required by the
+	// go-sql-driver DSN format, even when no database is selected.
+	dsn += "/"
 	if v, ok := os.LookupEnv(prefix + "DATABASE"); ok {
-		dsn += "/" + v
+		dsn += v
 	}
 
 	return dsn, nil
