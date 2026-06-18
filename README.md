@@ -13,7 +13,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/c9s/rockhopper/v2)](https://goreportcard.com/report/github.com/c9s/rockhopper/v2)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-D97757?logo=claude&logoColor=fff)](https://claude.ai/code)
 
-**rockhopper** is an embeddable database migration tool written in Go. Compile your SQL migrations into a single, self-contained binary, manage schemas across MySQL, PostgreSQL, and SQLite from one consistent workflow, and let your AI assistant drive the whole thing — create, apply, and roll back migrations in plain English with built-in [Claude Code](https://claude.ai/code) skills.
+**rockhopper** is an embeddable database migration tool written in Go. Compile your SQL migrations into a single, self-contained binary, manage schemas across MySQL, PostgreSQL, and SQLite from one consistent workflow, and let your AI assistant drive the whole thing — create, apply, and roll back migrations in plain English with built-in [Claude Code](https://claude.ai/code) skills. It reads Goose migration files as-is, handles real-world SQL down to raw `mysqldump` output, and connects to MySQL with no DSN tweaking required.
 
 > 🐧 *Named after the rockhopper penguin — a small bird with a yellowish crest that scales subantarctic cliffs by hopping from rock to rock, the same way you step through migrations one version at a time.*
 
@@ -39,6 +39,7 @@
 - [Multi-Dialect Workflow](#multi-dialect-workflow)
 - [Compiling Migrations into Go](#compiling-migrations-into-go)
 - [Go API](#go-api)
+- [Data Migrations](#data-migrations)
 - [Environment Variables](#environment-variables)
 - [Claude Code Support](#claude-code-support)
 - [Migrating from Goose](#migrating-from-goose)
@@ -50,8 +51,11 @@
 - 🤖 **AI-friendly by design** — ships with [Claude Code](https://claude.ai/code) skills so you can create, apply, and roll back migrations conversationally. Drop them into any project with a single `rockhopper skills install`.
 - 📦 **Truly embeddable** — compile SQL migrations into Go source and ship them *inside* your binary. No migration files to deploy, no runtime file dependencies.
 - 🗄️ **Multi-dialect** — one consistent workflow across MySQL, PostgreSQL, and SQLite3 (plus TiDB and Redshift aliases).
+- 🔁 **Resumable data migrations** — beyond schema changes, run long-running backfills as throttled, checkpointed batches that pick up exactly where they left off after an interruption, with each batch's writes and progress committed atomically. Gate them behind a schema version so they only run once the table they depend on exists.
+- 💪 **Resilient with real-world SQL** — parses everyday dumps, including raw `mysqldump` output, skips empty statements left behind when migrations are merged, and names the exact migration file and version when a statement fails.
+- 🔌 **Zero-config connections** — auto-enables MySQL's `parseTime=true`, so `DATETIME`/`TIMESTAMP` columns just work without hand-editing your DSN.
 - 🧩 **Package-based** — organize migrations by module and migrate each package independently.
-- 🔄 **Goose-compatible** — a familiar migration format, and it auto-migrates legacy `goose_db_version` tables for you.
+- 🔄 **Goose-compatible** — reads Goose's `-- +goose` annotation syntax directly, and auto-migrates legacy `goose_db_version` tables for you.
 - 🛠️ **CLI or library** — drive migrations from the cobra-based CLI, or call the Go API directly at app startup.
 
 ## Core Concepts
@@ -640,6 +644,106 @@ records, err := db.LoadMigrationRecordsByPackage(ctx, "main")
 // Find the last applied migration from a slice
 idx, lastApplied, err := db.FindLastAppliedMigration(ctx, migrations)
 ```
+
+## Data Migrations
+
+Schema migrations change table structure; **data migrations** move or backfill
+the rows. For a large table that work often can't run as a single statement in
+one transaction — it needs to be chunked, throttled, and able to resume after an
+interruption. Rockhopper's data-migration API owns that loop, so you only write
+the per-batch logic. This is a library feature (there is no CLI command for it).
+
+Each data migration implements the `DataMigrator` interface:
+
+- **`Plan`** runs once before the first batch. It may read the database to
+  compute bounds (e.g. the maximum primary key) and returns the initial
+  **checkpoint** — an opaque, serializable progress cursor (commonly JSON).
+- **`Batch`** processes one chunk starting from the current checkpoint and
+  returns the advanced checkpoint plus whether the migration is `done`. It is
+  handed a `BatchExecutor` bound to the transaction that *also* commits the new
+  checkpoint, so a batch's writes and its progress advance atomically.
+
+Status and checkpoint are persisted in a separate `rockhopper_data_migrations`
+table, independent of `rockhopper_versions`. Because each batch and its
+checkpoint commit together, a process that dies mid-batch rolls back cleanly and
+resumes from the last committed checkpoint without double-applying work — so
+batches should be written to be idempotent.
+
+### Implementing a migrator
+
+```go
+// a JSON checkpoint that advances an exclusive lower bound over the primary key
+type pkCursor struct {
+    Last int64 `json:"last"`
+    Max  int64 `json:"max"`
+}
+
+type backfillUsers struct{ batchSize int64 }
+
+func (b *backfillUsers) Plan(ctx context.Context, q rockhopper.Queryer) (rockhopper.Checkpoint, error) {
+    var c pkCursor
+    if err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(id), 0) FROM users").Scan(&c.Max); err != nil {
+        return nil, err
+    }
+    return json.Marshal(c)
+}
+
+func (b *backfillUsers) Batch(ctx context.Context, exec rockhopper.BatchExecutor, cp rockhopper.Checkpoint) (rockhopper.Checkpoint, bool, error) {
+    var c pkCursor
+    if err := json.Unmarshal(cp, &c); err != nil {
+        return nil, false, err
+    }
+
+    hi := c.Last + b.batchSize
+    // idempotent: only touches the (Last, hi] window that isn't migrated yet
+    if _, err := exec.ExecContext(ctx,
+        "UPDATE users SET migrated = 1 WHERE id > ? AND id <= ? AND migrated = 0", c.Last, hi); err != nil {
+        return nil, false, err
+    }
+
+    c.Last = hi
+    next, err := json.Marshal(c)
+    if err != nil {
+        return nil, false, err
+    }
+    return next, c.Last >= c.Max, nil // done once we pass the planned Max
+}
+```
+
+### Registering and running
+
+Register migrators from `init()` (the version is parsed from the source
+filename, like schema migrations), optionally gating them behind a schema
+version and throttling between batches:
+
+```go
+func init() {
+    rockhopper.AddDataMigration(
+        &backfillUsers{batchSize: 1000},
+        rockhopper.WithDataMigrationName("backfill_users"),
+        rockhopper.After(20240116231445),               // run only after this schema version is applied
+        rockhopper.WithThrottle(200*time.Millisecond),  // pause between batches to limit load / replication lag
+    )
+}
+```
+
+Then drive them to completion. Each call is safe to repeat: completed migrations
+are skipped and interrupted ones resume.
+
+```go
+// run every registered data migration (optionally filtered by package), in version order
+err := rockhopper.RunRegisteredDataMigrations(ctx, db, "main")
+
+// or run a specific one / an explicit list
+err = rockhopper.RunDataMigration(ctx, db, dm)
+err = rockhopper.RunDataMigrations(ctx, db, dms)
+```
+
+`RunDataMigration` creates the state table if needed, enforces the `After`
+dependency, calls `Plan` on the first run (or resumes from the stored
+checkpoint), then loops `Batch` — committing each batch with its checkpoint and
+pausing for `Throttle` — until the migrator reports `done`. Cancel the `ctx` to
+stop between batches; the next run picks up where it left off.
 
 ## Environment Variables
 
