@@ -3,6 +3,7 @@ package rockhopper
 import (
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -176,6 +177,69 @@ func TestMigrationParser_GooseAnnotations(t *testing.T) {
 		assert.Len(t, g.UpStmts, 1)
 		assert.Len(t, g.DownStmts, 1)
 	})
+}
+
+// TestMigrationParser_Mysqldump guards that a migration whose body is a real
+// mysqldump output parses correctly. mysqldump emits MySQL conditional-execution
+// comments (`/*!NNNNN ... */;`), `LOCK TABLES` / `UNLOCK TABLES`, bare `SET`
+// statements, backtick-quoted identifiers, and multi-line `CREATE TABLE` blocks —
+// all of which must pass through as plain SQL statements as long as the file
+// declares the `-- +up` section.
+func TestMigrationParser_Mysqldump(t *testing.T) {
+	data, err := os.ReadFile("testdata/migrations/20190506164114_mysqldump.sql")
+	assert.NoError(t, err)
+
+	p := &MigrationParser{}
+	chunk, err := p.ParseBytes(data)
+	assert.NoError(t, err, "a mysqldump-style migration body must parse without error")
+
+	assert.Len(t, chunk.UpStmts, 26)
+	assert.Len(t, chunk.DownStmts, 1)
+	assert.True(t, chunk.UseTx)
+
+	// A single-line conditional-execution comment is captured verbatim.
+	assert.Equal(t,
+		"/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;",
+		chunk.UpStmts[0].SQL)
+
+	// A bare statement with a leading space and trailing `;` is captured.
+	assert.Equal(t, "SET NAMES utf8mb4 ;", chunk.UpStmts[3].SQL)
+
+	// A multi-line CREATE TABLE is joined into one statement.
+	var createWidgets string
+	for _, s := range chunk.UpStmts {
+		if strings.HasPrefix(s.SQL, "CREATE TABLE `widgets`") {
+			createWidgets = s.SQL
+		}
+	}
+	if assert.NotEmpty(t, createWidgets, "CREATE TABLE `widgets` should be captured") {
+		assert.Contains(t, createWidgets, "`kind` enum('alpha','beta') NOT NULL")
+		assert.True(t, strings.HasSuffix(createWidgets, "COLLATE=utf8mb4_general_ci;"))
+	}
+
+	// Lines prefixed with extra dashes (`------`) are comments, so the retroactively
+	// commented-out table — including its INSERT containing semicolons — must NOT
+	// appear as statements.
+	for _, s := range chunk.UpStmts {
+		assert.NotContains(t, s.SQL, "legacy_items",
+			"commented-out tables must not be parsed as statements")
+	}
+}
+
+// TestMigrationParser_RawDumpWithoutUp documents the failure mode behind the
+// historical "unexpected state" error: a raw mysqldump fed in without a leading
+// `-- +up` annotation. The parser must reject it with an actionable message
+// rather than a cryptic state dump.
+func TestMigrationParser_RawDumpWithoutUp(t *testing.T) {
+	raw := "-- MySQL dump 10.13\n" +
+		"/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;\n" +
+		"/*!40103 SET TIME_ZONE='+00:00' */;\n"
+
+	p := &MigrationParser{}
+	_, err := p.ParseString(raw)
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "+up")
+	}
 }
 
 func Test_matchPackageName(t *testing.T) {
