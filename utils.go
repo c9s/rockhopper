@@ -17,6 +17,15 @@ func cleanSQL(s string) string {
 	return strings.TrimSpace(matchEmptyEOL.ReplaceAllString(s, ""))
 }
 
+// isNoOpSQL reports whether the statement carries no executable SQL — it is
+// empty, whitespace-only, contains only SQL comments, or is just semicolons.
+// Such statements can be left behind when migration queries are merged into
+// other files; executing them would trigger errors like MySQL 1065
+// "Query was empty".
+func isNoOpSQL(s string) bool {
+	return strings.Trim(cleanSQL(s), "; \t\r\n") == ""
+}
+
 func previewSQL(s string) string {
 	s = matchNewLinesAndSpaces.ReplaceAllString(s, " ")
 
