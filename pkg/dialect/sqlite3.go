@@ -60,6 +60,8 @@ func (m Sqlite3Dialect) CreateDataMigrationTableSQL(tableName string) string {
                 name TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'pending',
                 checkpoint TEXT,
+                lease_owner TEXT,
+                lease_expires_at INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT (datetime('now')),
                 updated_at TIMESTAMP DEFAULT (datetime('now')),
                 UNIQUE(package, version_id)
@@ -70,10 +72,21 @@ func (m Sqlite3Dialect) InsertDataMigrationSQL(tableName string) string {
 	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES (?, ?, ?, ?, ?)", tableName)
 }
 
-func (m Sqlite3Dialect) UpdateDataMigrationSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, updated_at = datetime('now') WHERE package = ? AND version_id = ?", tableName)
-}
-
 func (m Sqlite3Dialect) SelectDataMigrationSQL(tableName string) string {
 	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = ? AND version_id = ?", tableName)
+}
+
+func (m Sqlite3Dialect) AcquireDataMigrationLeaseSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET lease_owner = ?, lease_expires_at = ?, updated_at = datetime('now') "+
+		"WHERE package = ? AND version_id = ? AND (lease_owner IS NULL OR lease_owner = ? OR lease_expires_at < ?)", tableName)
+}
+
+func (m Sqlite3Dialect) CommitDataBatchSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, lease_expires_at = ?, updated_at = datetime('now') "+
+		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
+}
+
+func (m Sqlite3Dialect) ReleaseDataMigrationLeaseSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = ?, lease_owner = NULL, lease_expires_at = 0, updated_at = datetime('now') "+
+		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
 }

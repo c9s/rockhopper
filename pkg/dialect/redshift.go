@@ -61,6 +61,8 @@ func (d RedshiftDialect) CreateDataMigrationTableSQL(tableName string) string {
                 name VARCHAR(255) NOT NULL DEFAULT '',
                 status VARCHAR(32) NOT NULL DEFAULT 'pending',
                 checkpoint VARCHAR(65535),
+                lease_owner VARCHAR(255),
+                lease_expires_at BIGINT NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NULL default sysdate,
                 updated_at TIMESTAMP NULL default sysdate,
                 PRIMARY KEY(id)
@@ -71,10 +73,21 @@ func (d RedshiftDialect) InsertDataMigrationSQL(tableName string) string {
 	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES ($1, $2, $3, $4, $5)", tableName)
 }
 
-func (d RedshiftDialect) UpdateDataMigrationSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET status = $1, checkpoint = $2, updated_at = sysdate WHERE package = $3 AND version_id = $4", tableName)
-}
-
 func (d RedshiftDialect) SelectDataMigrationSQL(tableName string) string {
 	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = $1 AND version_id = $2", tableName)
+}
+
+func (d RedshiftDialect) AcquireDataMigrationLeaseSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET lease_owner = $1, lease_expires_at = $2, updated_at = sysdate "+
+		"WHERE package = $3 AND version_id = $4 AND (lease_owner IS NULL OR lease_owner = $5 OR lease_expires_at < $6)", tableName)
+}
+
+func (d RedshiftDialect) CommitDataBatchSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = $1, checkpoint = $2, lease_expires_at = $3, updated_at = sysdate "+
+		"WHERE package = $4 AND version_id = $5 AND lease_owner = $6", tableName)
+}
+
+func (d RedshiftDialect) ReleaseDataMigrationLeaseSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = $1, lease_owner = NULL, lease_expires_at = 0, updated_at = sysdate "+
+		"WHERE package = $2 AND version_id = $3 AND lease_owner = $4", tableName)
 }

@@ -42,14 +42,26 @@ type SQLDialect interface {
 	// status, checkpoint.
 	InsertDataMigrationSQL(tableName string) string
 
-	// UpdateDataMigrationSQL returns the sql string to update an existing
-	// data-migration state row. Argument order: status, checkpoint, package,
-	// version_id.
-	UpdateDataMigrationSQL(tableName string) string
-
 	// SelectDataMigrationSQL returns the sql string to load the status and
 	// checkpoint of a data migration. Argument order: package, version_id.
 	SelectDataMigrationSQL(tableName string) string
+
+	// AcquireDataMigrationLeaseSQL returns the sql string to conditionally
+	// claim the lease (when unowned, self-owned or expired). Argument order:
+	// owner, expires_at, package, version_id, owner, now. A claim succeeded
+	// when exactly one row was affected.
+	AcquireDataMigrationLeaseSQL(tableName string) string
+
+	// CommitDataBatchSQL returns the sql string to persist a batch's status and
+	// checkpoint while renewing the lease, guarded by ownership. Argument
+	// order: status, checkpoint, expires_at, package, version_id, owner. The
+	// caller still holds the lease when exactly one row was affected.
+	CommitDataBatchSQL(tableName string) string
+
+	// ReleaseDataMigrationLeaseSQL returns the sql string to set a terminal
+	// status and clear the lease, guarded by ownership. Argument order: status,
+	// package, version_id, owner.
+	ReleaseDataMigrationLeaseSQL(tableName string) string
 }
 
 func LoadDialect(d string) (SQLDialect, error) {

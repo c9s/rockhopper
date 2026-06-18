@@ -62,6 +62,8 @@ func (m MySQLDialect) CreateDataMigrationTableSQL(tableName string) string {
                 name VARCHAR(255) NOT NULL DEFAULT '',
                 status VARCHAR(32) NOT NULL DEFAULT 'pending',
                 checkpoint TEXT,
+                lease_owner VARCHAR(255),
+                lease_expires_at BIGINT NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
                 PRIMARY KEY(id),
@@ -73,10 +75,21 @@ func (m MySQLDialect) InsertDataMigrationSQL(tableName string) string {
 	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES (?, ?, ?, ?, ?)", tableName)
 }
 
-func (m MySQLDialect) UpdateDataMigrationSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, updated_at = NOW() WHERE package = ? AND version_id = ?", tableName)
-}
-
 func (m MySQLDialect) SelectDataMigrationSQL(tableName string) string {
 	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = ? AND version_id = ?", tableName)
+}
+
+func (m MySQLDialect) AcquireDataMigrationLeaseSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET lease_owner = ?, lease_expires_at = ?, updated_at = NOW() "+
+		"WHERE package = ? AND version_id = ? AND (lease_owner IS NULL OR lease_owner = ? OR lease_expires_at < ?)", tableName)
+}
+
+func (m MySQLDialect) CommitDataBatchSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, lease_expires_at = ?, updated_at = NOW() "+
+		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
+}
+
+func (m MySQLDialect) ReleaseDataMigrationLeaseSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = ?, lease_owner = NULL, lease_expires_at = 0, updated_at = NOW() "+
+		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
 }
