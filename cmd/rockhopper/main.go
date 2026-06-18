@@ -16,7 +16,7 @@ import (
 var config *rockhopper.Config
 
 var rootCmd = &cobra.Command{
-	Use:   "rh",
+	Use:   "rockhopper",
 	Short: "rockhopper migration tool",
 	Long:  "rockhopper is a migration tool written in Go",
 
