@@ -121,6 +121,61 @@ func TestMigrationParser_GooseAnnotations(t *testing.T) {
 		assert.Equal(t, n, g, "goose NO TRANSACTION should parse the same as native !txn")
 		assert.False(t, g.UseTx, "NO TRANSACTION should disable transaction wrapping")
 	})
+
+	t.Run("full file with statement blocks in both directions", func(t *testing.T) {
+		goose := "-- +goose Up\n" +
+			"-- +goose StatementBegin\n" +
+			"CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;\n" +
+			"-- +goose StatementEnd\n" +
+			"INSERT INTO t (c) VALUES (1);\n" +
+			"-- +goose Down\n" +
+			"-- +goose StatementBegin\n" +
+			"DROP FUNCTION f();\n" +
+			"-- +goose StatementEnd\n" +
+			"DELETE FROM t WHERE c = 1;\n"
+		native := "-- +up\n" +
+			"-- +begin\n" +
+			"CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;\n" +
+			"-- +end\n" +
+			"INSERT INTO t (c) VALUES (1);\n" +
+			"-- +down\n" +
+			"-- +begin\n" +
+			"DROP FUNCTION f();\n" +
+			"-- +end\n" +
+			"DELETE FROM t WHERE c = 1;\n"
+
+		g, err := p.ParseString(goose)
+		assert.NoError(t, err)
+		n, err := p.ParseString(native)
+		assert.NoError(t, err)
+
+		assert.Equal(t, n, g, "a complete goose file should parse identically to its native equivalent")
+		assert.Len(t, g.UpStmts, 2)
+		assert.Len(t, g.DownStmts, 2)
+	})
+
+	t.Run("annotation keywords are case-insensitive", func(t *testing.T) {
+		// goose itself is case-sensitive, but we are lenient so that
+		// hand-written variants still translate correctly.
+		goose := "-- +goose up\nCREATE TABLE post (id int);\n-- +goose DOWN\nDROP TABLE post;\n"
+		native := "-- +up\nCREATE TABLE post (id int);\n-- +down\nDROP TABLE post;\n"
+
+		g, err := p.ParseString(goose)
+		assert.NoError(t, err)
+		n, err := p.ParseString(native)
+		assert.NoError(t, err)
+		assert.Equal(t, n, g, "goose keyword casing should not affect parsing")
+	})
+
+	t.Run("package annotation alongside goose annotations", func(t *testing.T) {
+		goose := "-- @package mypkg\n-- +goose Up\nCREATE TABLE post (id int);\n-- +goose Down\nDROP TABLE post;\n"
+
+		g, err := p.ParseString(goose)
+		assert.NoError(t, err)
+		assert.Equal(t, "mypkg", g.Package)
+		assert.Len(t, g.UpStmts, 1)
+		assert.Len(t, g.DownStmts, 1)
+	})
 }
 
 func Test_matchPackageName(t *testing.T) {
