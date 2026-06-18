@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
@@ -50,7 +51,7 @@ func OpenWithConfig(config *Config) (*DB, error) {
 	if len(dsn) == 0 {
 		dsn, err = BuildDSNFromEnvVars(config.Driver)
 		if err != nil {
-			return nil, errors.Wrap(err, "dsn is not defined, can not build dsn")
+			return nil, fmt.Errorf("failed to build dsn from env vars: %w", err)
 		}
 	}
 
@@ -110,7 +111,7 @@ func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (
 
 	db, err := sql.Open(driverName, dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open database connection with dsn: %q: %w", maskDsnPassword(dsn), err)
 	}
 
 	return New(driverName, dialect, db, tableName), nil
@@ -489,4 +490,19 @@ func (db *DB) InspectMigrations(ctx context.Context, migrations MigrationSlice) 
 	}
 
 	return status, nil
+}
+
+// maskDsnPassword mask the password from the DSN string
+func maskDsnPassword(dsn string) string {
+	d, err := mysql.ParseDSN(dsn) // just to validate the DSN, ignore the error
+	if err != nil {
+		return dsn
+	}
+
+	d.Passwd = "******"
+	return d.FormatDSN()
+}
+
+func getPassword() string {
+	return os.Getenv("ROCKHOPPER_PASSWORD")
 }
