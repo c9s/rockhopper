@@ -20,8 +20,27 @@ jobs:
       MYSQL_USER: "root"
       MYSQL_PASSWORD: "root" # pragma: allowlist secret
 
-      # DSN for mysql integration tests
-      TEST_MYSQL_DSN: "root:root@tcp(localhost:3306)/integration_test?parseTime=true"
+      # DSN for mysql integration tests. The cloud CI runner cannot reach the
+      # Docker API, so the integration test connects to the MySQL service
+      # container below instead of starting its own container.
+      TEST_MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/integration_test?parseTime=true"
+
+    # Run MySQL as a service container. GitHub Actions starts it before the job
+    # and waits until it is healthy; the test connects to it over the mapped
+    # port via TEST_MYSQL_DSN.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: "root" # pragma: allowlist secret
+          MYSQL_DATABASE: bbgo
+        ports:
+        - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
 
@@ -40,10 +59,11 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Set up MySQL
+      # The service container already created the bbgo database (MYSQL_DATABASE).
+      # Create the separate database used by the integration test.
       run: |
-        sudo /etc/init.d/mysql start
-        mysql -e 'CREATE DATABASE ${{ env.MYSQL_DATABASE }};' -u${{ env.MYSQL_USER }} -p${{ env.MYSQL_PASSWORD }}
-        mysql -e 'CREATE DATABASE integration_test;' -u${{ env.MYSQL_USER }} -p${{ env.MYSQL_PASSWORD }}
+        mysql -h 127.0.0.1 -P 3306 -u${{ env.MYSQL_USER }} -p${{ env.MYSQL_PASSWORD }} \
+          -e 'CREATE DATABASE IF NOT EXISTS integration_test;'
 
     - name: Set up Go
       uses: actions/setup-go@v5
