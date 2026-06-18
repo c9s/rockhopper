@@ -182,7 +182,7 @@ func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
 // migrations folder and go func registry, and key them by version.
 func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("%s directory does not exists", dir)
+		return nil, fmt.Errorf("directory %q does not exists", dir)
 	}
 
 	var migrations MigrationSlice
