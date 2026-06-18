@@ -106,7 +106,11 @@ func (m *Migration) runUp(ctx context.Context, db *DB) error {
 	}
 
 	var executor = m.getStmtExecutor()
-	return executor(ctx, db.DB, fn, finalizer)
+	if err := executor(ctx, db.DB, fn, finalizer); err != nil {
+		return errors.Wrapf(err, "up migration failed: %s", m.location())
+	}
+
+	return nil
 }
 
 func (m *Migration) runDown(ctx context.Context, db *DB) error {
@@ -118,7 +122,22 @@ func (m *Migration) runDown(ctx context.Context, db *DB) error {
 	}
 
 	var executor = m.getStmtExecutor()
-	return executor(ctx, db.DB, fn, finalizer)
+	if err := executor(ctx, db.DB, fn, finalizer); err != nil {
+		return errors.Wrapf(err, "down migration failed: %s", m.location())
+	}
+
+	return nil
+}
+
+// location returns a human-readable identifier of the migration for error
+// messages: the source filename when known, plus the version and package.
+func (m *Migration) location() string {
+	source := m.Source
+	if source == "" {
+		source = m.Name
+	}
+
+	return fmt.Sprintf("source=%q version=%d package=%q", source, m.Version, m.Package)
 }
 
 type statementExecution func(ctx context.Context, e SQLExecutor, stmt *Statement) error
@@ -189,11 +208,20 @@ func executeStatement(ctx context.Context, e SQLExecutor, stmt *Statement) error
 	return fn(ctx, e, stmt)
 }
 
-// executeStatements executes the given statements sequentially
+// executeStatements executes the given statements sequentially. Statements that
+// carry no executable SQL (empty, comment-only, or just semicolons) are skipped
+// so leftover queries from merged migration files do not fail execution.
 func executeStatements(ctx context.Context, e SQLExecutor, stmts []Statement) error {
-	for _, stmt := range stmts {
-		if err := executeStatement(ctx, e, &stmt); err != nil {
-			return err
+	for i := range stmts {
+		stmt := &stmts[i]
+
+		if isNoOpSQL(stmt.SQL) {
+			log.Debugf("skipping empty SQL statement #%d", i+1)
+			continue
+		}
+
+		if err := executeStatement(ctx, e, stmt); err != nil {
+			return errors.Wrapf(err, "statement #%d", i+1)
 		}
 	}
 
