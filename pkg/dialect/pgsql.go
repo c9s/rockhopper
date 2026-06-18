@@ -53,3 +53,30 @@ func (d PostgresDialect) MigrationSQL(tableName string) string {
 func (d PostgresDialect) DeleteVersionSQL(tableName string) string {
 	return fmt.Sprintf("DELETE FROM %s WHERE package = $1 AND version_id = $2", tableName)
 }
+
+func (d PostgresDialect) CreateDataMigrationTableSQL(tableName string) string {
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+                id serial NOT NULL,
+                package VARCHAR(128) NOT NULL DEFAULT 'main',
+                version_id BIGINT NOT NULL,
+                name VARCHAR(255) NOT NULL DEFAULT '',
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                checkpoint TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                PRIMARY KEY(id),
+                UNIQUE(package, version_id)
+            );`, tableName)
+}
+
+func (d PostgresDialect) InsertDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES ($1, $2, $3, $4, $5)", tableName)
+}
+
+func (d PostgresDialect) UpdateDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = $1, checkpoint = $2, updated_at = NOW() WHERE package = $3 AND version_id = $4", tableName)
+}
+
+func (d PostgresDialect) SelectDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = $1 AND version_id = $2", tableName)
+}

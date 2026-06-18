@@ -32,6 +32,24 @@ type SQLDialect interface {
 	// QueryVersionsSQL returns the sql string to query the version info descending
 	QueryVersionsSQL(tableName string) string
 	DBVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error)
+
+	// CreateDataMigrationTableSQL returns the sql string to create the
+	// data-migration state table (checkpoint/status tracking).
+	CreateDataMigrationTableSQL(tableName string) string
+
+	// InsertDataMigrationSQL returns the sql string to insert a new
+	// data-migration state row. Argument order: package, version_id, name,
+	// status, checkpoint.
+	InsertDataMigrationSQL(tableName string) string
+
+	// UpdateDataMigrationSQL returns the sql string to update an existing
+	// data-migration state row. Argument order: status, checkpoint, package,
+	// version_id.
+	UpdateDataMigrationSQL(tableName string) string
+
+	// SelectDataMigrationSQL returns the sql string to load the status and
+	// checkpoint of a data migration. Argument order: package, version_id.
+	SelectDataMigrationSQL(tableName string) string
 }
 
 func LoadDialect(d string) (SQLDialect, error) {

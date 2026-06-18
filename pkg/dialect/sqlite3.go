@@ -51,3 +51,29 @@ func (m Sqlite3Dialect) MigrationSQL(tableName string) string {
 func (m Sqlite3Dialect) DeleteVersionSQL(tableName string) string {
 	return fmt.Sprintf("DELETE FROM %s WHERE package = ? AND version_id = ?", tableName)
 }
+
+func (m Sqlite3Dialect) CreateDataMigrationTableSQL(tableName string) string {
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                package TEXT NOT NULL DEFAULT 'main',
+                version_id INTEGER NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                checkpoint TEXT,
+                created_at TIMESTAMP DEFAULT (datetime('now')),
+                updated_at TIMESTAMP DEFAULT (datetime('now')),
+                UNIQUE(package, version_id)
+            );`, tableName)
+}
+
+func (m Sqlite3Dialect) InsertDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES (?, ?, ?, ?, ?)", tableName)
+}
+
+func (m Sqlite3Dialect) UpdateDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, updated_at = datetime('now') WHERE package = ? AND version_id = ?", tableName)
+}
+
+func (m Sqlite3Dialect) SelectDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = ? AND version_id = ?", tableName)
+}

@@ -53,3 +53,30 @@ func (m MySQLDialect) MigrationSQL(tableName string) string {
 func (m MySQLDialect) DeleteVersionSQL(tableName string) string {
 	return fmt.Sprintf("DELETE FROM %s WHERE package = ? AND version_id = ?", tableName)
 }
+
+func (m MySQLDialect) CreateDataMigrationTableSQL(tableName string) string {
+	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+                id SERIAL NOT NULL,
+                package VARCHAR(125) NOT NULL DEFAULT 'main',
+                version_id BIGINT NOT NULL,
+                name VARCHAR(255) NOT NULL DEFAULT '',
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                checkpoint TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                PRIMARY KEY(id),
+                UNIQUE KEY uniq_data_migration (package, version_id)
+            );`, tableName)
+}
+
+func (m MySQLDialect) InsertDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES (?, ?, ?, ?, ?)", tableName)
+}
+
+func (m MySQLDialect) UpdateDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, updated_at = NOW() WHERE package = ? AND version_id = ?", tableName)
+}
+
+func (m MySQLDialect) SelectDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = ? AND version_id = ?", tableName)
+}

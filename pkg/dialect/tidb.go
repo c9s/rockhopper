@@ -52,3 +52,30 @@ func (m TiDBDialect) MigrationSQL(tableName string) string {
 func (m TiDBDialect) DeleteVersionSQL(tableName string) string {
 	return fmt.Sprintf("DELETE FROM %s WHERE package = ? AND version_id = ?", tableName)
 }
+
+func (m TiDBDialect) CreateDataMigrationTableSQL(tableName string) string {
+	return fmt.Sprintf(`CREATE TABLE %s (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+                package VARCHAR(128) NOT NULL DEFAULT 'main',
+                version_id BIGINT NOT NULL,
+                name VARCHAR(255) NOT NULL DEFAULT '',
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                checkpoint TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                PRIMARY KEY(id),
+                UNIQUE KEY uniq_data_migration (package, version_id)
+            );`, tableName)
+}
+
+func (m TiDBDialect) InsertDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES (?, ?, ?, ?, ?)", tableName)
+}
+
+func (m TiDBDialect) UpdateDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, updated_at = NOW() WHERE package = ? AND version_id = ?", tableName)
+}
+
+func (m TiDBDialect) SelectDataMigrationSQL(tableName string) string {
+	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = ? AND version_id = ?", tableName)
+}
