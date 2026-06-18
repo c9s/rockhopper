@@ -1,7 +1,7 @@
 //go:build !no_mysql
 // +build !no_mysql
 
-package rockhopper
+package driver
 
 import (
 	"testing"
@@ -14,7 +14,7 @@ import (
 // the MySQL driver always yields parseTime=true, which rockhopper needs so the
 // version table's tstamp column scans into time.Time.
 func TestNormalizeMySQLDSN_ParseTime(t *testing.T) {
-	require.NotNil(t, normalizeMySQLDSN, "the MySQL driver must register the DSN normalizer")
+	require.NotNil(t, NormalizeMySQLDSN, "the MySQL driver must register the DSN normalizer")
 
 	tests := []struct {
 		name string
@@ -50,7 +50,7 @@ func TestNormalizeMySQLDSN_ParseTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := normalizeMySQLDSN(tt.dsn)
+			got, err := NormalizeMySQLDSN(tt.dsn)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -58,8 +58,8 @@ func TestNormalizeMySQLDSN_ParseTime(t *testing.T) {
 }
 
 func TestNormalizeMySQLDSN_Invalid(t *testing.T) {
-	require.NotNil(t, normalizeMySQLDSN)
+	require.NotNil(t, NormalizeMySQLDSN)
 
-	_, err := normalizeMySQLDSN("::::not a dsn")
+	_, err := NormalizeMySQLDSN("::::not a dsn")
 	assert.Error(t, err)
 }

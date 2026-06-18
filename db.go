@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/c9s/rockhopper/v2/pkg/dialect"
+	"github.com/c9s/rockhopper/v2/pkg/driver"
 )
 
 const (
@@ -98,13 +99,6 @@ func OpenWithEnv(prefix string) (*DB, error) {
 	return Open(driverName, dialect, dsn, TableName)
 }
 
-// normalizeMySQLDSN, when set, rewrites a MySQL DSN so that parseTime=true is
-// enabled. rockhopper scans the version table's tstamp column into time.Time,
-// which requires parseTime=true; without it the driver returns the raw []byte
-// and scanning fails. It is registered by driver_mysql.go and stays nil when
-// the MySQL driver is excluded from the build (the no_mysql build tag).
-var normalizeMySQLDSN func(dsn string) (string, error)
-
 // Open creates a connection to a database
 func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (*DB, error) {
 	driverName = castDriverName(driverName)
@@ -118,8 +112,8 @@ func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (
 
 	// Ensure parseTime=true is set for MySQL/TiDB so DATETIME/TIMESTAMP columns
 	// scan into time.Time. castDriverName has already folded TiDB into MySQL.
-	if driverName == DialectMySQL && dsn != "" && normalizeMySQLDSN != nil {
-		normalized, err := normalizeMySQLDSN(dsn)
+	if driverName == DialectMySQL && dsn != "" && driver.NormalizeMySQLDSN != nil {
+		normalized, err := driver.NormalizeMySQLDSN(dsn)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse mysql dsn: %q: %w", maskDsnPassword(dsn), err)
 		}

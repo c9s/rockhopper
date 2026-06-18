@@ -1,7 +1,7 @@
 //go:build !no_mysql
 // +build !no_mysql
 
-package rockhopper
+package driver
 
 import (
 	"github.com/go-sql-driver/mysql"
@@ -12,7 +12,7 @@ import (
 // registers the "mysql" driver with database/sql. We additionally register a
 // DSN normalizer so Open can guarantee parseTime=true.
 func init() {
-	normalizeMySQLDSN = func(dsn string) (string, error) {
+	NormalizeMySQLDSN = func(dsn string) (string, error) {
 		cfg, err := mysql.ParseDSN(dsn)
 		if err != nil {
 			return dsn, err
