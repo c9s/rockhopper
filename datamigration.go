@@ -2,12 +2,17 @@ package rockhopper
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,6 +32,50 @@ const (
 	// DataMigrationFailed means a batch returned an error.
 	DataMigrationFailed = "failed"
 )
+
+// DefaultLeaseTTL is the lease duration used when a data migration does not set
+// one. The lease is renewed on every batch commit, so the TTL only needs to
+// comfortably exceed a single batch's duration plus its throttle pause.
+const DefaultLeaseTTL = 30 * time.Second
+
+var (
+	// ErrLeaseHeld is returned when another live process holds the lease for a
+	// data migration. Callers running a single driver (e.g. a Kubernetes Job
+	// with parallelism 1) may treat this as a benign "someone else is on it".
+	ErrLeaseHeld = errors.New("data migration lease is held by another process")
+
+	// ErrLeaseLost is returned when the lease was taken over by another process
+	// mid-run (the holder stalled past the TTL). The in-flight batch is rolled
+	// back rather than committed.
+	ErrLeaseLost = errors.New("data migration lease lost to another process")
+)
+
+// leaseOwner identifies this process when claiming leases. It is computed once
+// and is unique per process (and per pod, since the hostname is the pod name in
+// Kubernetes).
+var (
+	leaseOwnerOnce  sync.Once
+	leaseOwnerValue string
+)
+
+func leaseOwner() string {
+	leaseOwnerOnce.Do(func() {
+		host, err := os.Hostname()
+		if err != nil || host == "" {
+			host = "unknown"
+		}
+
+		var nonce [4]byte
+		if _, err := rand.Read(nonce[:]); err != nil {
+			leaseOwnerValue = fmt.Sprintf("%s:%d", host, os.Getpid())
+			return
+		}
+
+		leaseOwnerValue = fmt.Sprintf("%s:%d:%s", host, os.Getpid(), hex.EncodeToString(nonce[:]))
+	})
+
+	return leaseOwnerValue
+}
 
 // Checkpoint is the opaque, serializable progress cursor of a data migration.
 // The framework stores it verbatim and hands it back on resume; only the
@@ -95,6 +144,19 @@ type DataMigration struct {
 	// Throttle is the pause inserted between batches to limit load and
 	// replication lag. Zero means no pause.
 	Throttle time.Duration
+
+	// LeaseTTL is how long an acquired lease stays valid before another process
+	// may steal it. It is renewed on every batch commit. Zero means
+	// DefaultLeaseTTL. It must exceed a single batch's duration plus Throttle.
+	LeaseTTL time.Duration
+}
+
+func (dm *DataMigration) leaseTTL() time.Duration {
+	if dm.LeaseTTL > 0 {
+		return dm.LeaseTTL
+	}
+
+	return DefaultLeaseTTL
 }
 
 func (dm *DataMigration) String() string {
@@ -127,6 +189,15 @@ func WithThrottle(d time.Duration) DataMigrationOption {
 func WithDataMigrationName(name string) DataMigrationOption {
 	return func(dm *DataMigration) {
 		dm.Name = name
+	}
+}
+
+// WithLeaseTTL sets how long an acquired lease stays valid before another
+// process may steal it. It must exceed a single batch's duration plus the
+// throttle pause.
+func WithLeaseTTL(d time.Duration) DataMigrationOption {
+	return func(dm *DataMigration) {
+		dm.LeaseTTL = d
 	}
 }
 
