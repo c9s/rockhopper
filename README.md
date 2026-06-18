@@ -77,7 +77,7 @@ A few ideas explain how rockhopper behaves. Skim these once and the commands bel
 ## Install
 
 ```sh
-go install github.com/c9s/rockhopper/v2/cmd/rockhopper@v2.0.7
+go install github.com/c9s/rockhopper/v2/cmd/rockhopper@latest
 ```
 
 ## Quick Start
