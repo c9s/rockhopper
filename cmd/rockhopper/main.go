@@ -24,7 +24,6 @@ var rootCmd = &cobra.Command{
 	SilenceUsage: true,
 
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("preRunE")
 		return nil
 	},
 
