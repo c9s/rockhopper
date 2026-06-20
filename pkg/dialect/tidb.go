@@ -10,7 +10,7 @@ type TiDBDialect struct {
 // tokens (so dialect-specific overrides dispatch correctly).
 func NewTiDBDialect() *TiDBDialect {
 	d := &TiDBDialect{}
-	d.CRUD = NewCRUD(d)
+	d.LeaseCRUD = NewLeaseCRUD(d)
 	return d
 }
 

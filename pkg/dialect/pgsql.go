@@ -4,14 +4,14 @@ import "fmt"
 
 // PostgresDialect implements Dialect for PostgreSQL.
 type PostgresDialect struct {
-	CRUD
+	LeaseCRUD
 }
 
 // NewPostgresDialect constructs a PostgresDialect with its CRUD builder wired to
 // its own tokens.
 func NewPostgresDialect() *PostgresDialect {
 	d := &PostgresDialect{}
-	d.CRUD = NewCRUD(d)
+	d.LeaseCRUD = NewLeaseCRUD(d)
 	return d
 }
 

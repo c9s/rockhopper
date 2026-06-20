@@ -42,6 +42,18 @@ func dataMigrationSchema(tableName string) dialect.Schema {
 	}
 }
 
+// leaseBuilder returns the dialect's data-migration lease capability, or
+// ErrDataMigrationUnsupported when the dialect cannot honor the conditional
+// lease (e.g. ClickHouse). It is the single gate that keeps the data-migration
+// runner from emitting lease SQL a dialect cannot execute.
+func (db *DB) leaseBuilder() (dialect.LeaseBuilder, error) {
+	if lb, ok := db.dialect.(dialect.LeaseBuilder); ok {
+		return lb, nil
+	}
+
+	return nil, ErrDataMigrationUnsupported
+}
+
 // loadDataMigrationState loads the persisted status and checkpoint for a data
 // migration. found is false when no row exists yet.
 func (db *DB) loadDataMigrationState(ctx context.Context, pkgName string, version int64) (status string, cp Checkpoint, found bool, err error) {
@@ -90,10 +102,15 @@ func (db *DB) insertDataMigrationState(ctx context.Context, exec SQLExecutor, dm
 // It succeeds when the lease is unowned, already owned by this process, or
 // expired. It returns false (without error) when another live process holds it.
 func (db *DB) acquireDataMigrationLease(ctx context.Context, dm *DataMigration, owner string, ttl time.Duration) (bool, error) {
+	lb, err := db.leaseBuilder()
+	if err != nil {
+		return false, err
+	}
+
 	now := time.Now()
 	expiresAt := now.Add(ttl).Unix()
 
-	q, args := db.dialect.AcquireLease(DataMigrationTableName,
+	q, args := lb.AcquireLease(DataMigrationTableName,
 		[]dialect.Col{
 			{Name: "package", Val: dm.Package},
 			{Name: "version_id", Val: dm.Version},
@@ -116,7 +133,12 @@ func (db *DB) acquireDataMigrationLease(ctx context.Context, dm *DataMigration, 
 // releaseDataMigrationLease sets a terminal status and clears the lease, guarded
 // by ownership (a process that no longer holds the lease is a no-op).
 func (db *DB) releaseDataMigrationLease(ctx context.Context, dm *DataMigration, owner, status string) error {
-	q, args := db.dialect.ReleaseLease(DataMigrationTableName, status,
+	lb, err := db.leaseBuilder()
+	if err != nil {
+		return err
+	}
+
+	q, args := lb.ReleaseLease(DataMigrationTableName, status,
 		[]dialect.Col{
 			{Name: "package", Val: dm.Package},
 			{Name: "version_id", Val: dm.Version},
@@ -156,6 +178,12 @@ func (db *DB) isSchemaVersionApplied(ctx context.Context, pkgName string, versio
 func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 	if dm.Migrator == nil {
 		return fmt.Errorf("data migration %s has no migrator", dm)
+	}
+
+	// fail fast (before creating any table) when the dialect cannot honor the
+	// lease that the data-migration runner depends on.
+	if _, err := db.leaseBuilder(); err != nil {
+		return fmt.Errorf("data migration %s: %w", dm, err)
 	}
 
 	// ensure both the version table (for the dependency check) and the
@@ -289,6 +317,11 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 // lease, all in a single transaction. It returns ErrLeaseLost if ownership was
 // taken over before the batch could commit.
 func (db *DB) runDataBatch(ctx context.Context, dm *DataMigration, owner string, ttl time.Duration, cp Checkpoint) (next Checkpoint, done bool, err error) {
+	lb, err := db.leaseBuilder()
+	if err != nil {
+		return nil, false, err
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		return nil, false, err
@@ -306,7 +339,7 @@ func (db *DB) runDataBatch(ctx context.Context, dm *DataMigration, owner string,
 
 	expiresAt := time.Now().Add(ttl).Unix()
 
-	q, args := db.dialect.CommitLease(DataMigrationTableName,
+	q, args := lb.CommitLease(DataMigrationTableName,
 		[]dialect.Col{
 			{Name: "status", Val: status},
 			{Name: "checkpoint", Val: string(next)},

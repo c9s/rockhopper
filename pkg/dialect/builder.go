@@ -48,13 +48,21 @@ type UpdateOpt struct {
 // The table name and columns are arguments, so one method serves every table,
 // and each method returns the SQL together with its bind arguments in the same
 // order the placeholders were emitted — there is no separate "argument order" to
-// keep in sync by hand.
+// keep in sync by hand. Every dialect (OLTP and OLAP) implements it.
 type Builder interface {
 	Insert(table string, cols []Col) (string, []any)
 	Delete(table string, keys []Col) (string, []any)
 	Select(table string, cols []string, keys []Col, opt SelectOpt) (string, []any)
 	Update(table string, set, keys []Col, opt UpdateOpt) (string, []any)
+}
 
+// LeaseBuilder is the optional data-migration lease capability. Honoring the
+// lease requires a conditional UPDATE whose RowsAffected()==1 atomically signals
+// exclusive ownership. The OLTP dialects implement it; OLAP backends such as
+// ClickHouse — whose UPDATE/DELETE are asynchronous mutations with no synchronous
+// affected-row count — deliberately do not, and the data-migration layer detects
+// the absence via a type assertion and refuses to run.
+type LeaseBuilder interface {
 	// AcquireLease conditionally claims the data-migration lease (when unowned,
 	// already owned by owner, or expired).
 	AcquireLease(table string, keys []Col, owner string, expiresAt, now int64) (string, []any)
@@ -66,14 +74,25 @@ type Builder interface {
 	ReleaseLease(table, status string, keys []Col, owner string) (string, []any)
 }
 
-// CRUD renders the Builder shapes from a dialect's Tokens. It is embedded in each
-// dialect so callers can write d.Insert(...), d.Update(...), etc.
+// CRUD renders the core Builder shapes from a dialect's Tokens. It is embedded in
+// each dialect (directly for OLAP dialects, via LeaseCRUD for OLTP ones) so
+// callers can write d.Insert(...), d.Update(...), etc.
 type CRUD struct {
 	t Tokens
 }
 
 // NewCRUD binds a CRUD builder to a dialect's tokens.
 func NewCRUD(t Tokens) CRUD { return CRUD{t: t} }
+
+// LeaseCRUD adds the data-migration lease shapes on top of the core CRUD shapes.
+// OLTP dialects embed it (instead of CRUD) so they satisfy LeaseBuilder; OLAP
+// dialects embed plain CRUD and thus do not.
+type LeaseCRUD struct {
+	CRUD
+}
+
+// NewLeaseCRUD binds a lease-capable CRUD builder to a dialect's tokens.
+func NewLeaseCRUD(t Tokens) LeaseCRUD { return LeaseCRUD{CRUD: NewCRUD(t)} }
 
 func (c CRUD) Insert(table string, cols []Col) (string, []any) {
 	names := make([]string, len(cols))
@@ -159,7 +178,7 @@ func (c CRUD) Update(table string, set, keys []Col, opt UpdateOpt) (string, []an
 	return q, args
 }
 
-func (c CRUD) AcquireLease(table string, keys []Col, owner string, expiresAt, now int64) (string, []any) {
+func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresAt, now int64) (string, []any) {
 	n := 0
 	next := func() string { n++; return c.t.Placeholder(n) }
 
@@ -183,14 +202,14 @@ func (c CRUD) AcquireLease(table string, keys []Col, owner string, expiresAt, no
 	return q, args
 }
 
-func (c CRUD) CommitLease(table string, set, keys []Col, owner string) (string, []any) {
+func (c LeaseCRUD) CommitLease(table string, set, keys []Col, owner string) (string, []any) {
 	return c.Update(table, set, keys, UpdateOpt{
 		NowCols: []string{"updated_at"},
 		Lock:    &Col{Name: "lease_owner", Val: owner},
 	})
 }
 
-func (c CRUD) ReleaseLease(table, status string, keys []Col, owner string) (string, []any) {
+func (c LeaseCRUD) ReleaseLease(table, status string, keys []Col, owner string) (string, []any) {
 	return c.Update(table,
 		[]Col{{Name: "status", Val: status}, {Name: "lease_expires_at", Val: int64(0)}},
 		keys,

@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	DialectPostgres = "postgres"
-	DialectMySQL    = "mysql"
-	DialectSQLite3  = "sqlite3"
-	DialectRedshift = "redshift"
-	DialectTiDB     = "tidb"
+	DialectPostgres   = "postgres"
+	DialectMySQL      = "mysql"
+	DialectSQLite3    = "sqlite3"
+	DialectRedshift   = "redshift"
+	DialectTiDB       = "tidb"
+	DialectClickHouse = "clickhouse"
 )
 
 // SQLDialect abstracts the details of specific SQL dialects. The concrete
@@ -30,6 +31,8 @@ func LoadDialect(d string) (SQLDialect, error) {
 		return dialect.NewRedshiftDialect(), nil
 	case DialectTiDB:
 		return dialect.NewTiDBDialect(), nil
+	case DialectClickHouse:
+		return dialect.NewClickHouseDialect(), nil
 	}
 
 	return nil, fmt.Errorf("%q: unknown dialect", d)
