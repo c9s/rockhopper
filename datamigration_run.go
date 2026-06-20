@@ -8,22 +8,51 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/c9s/rockhopper/v2/pkg/dialect"
 )
 
 // TouchDataMigrationTable creates the data-migration state table if it does not
 // exist yet.
 func (db *DB) TouchDataMigrationTable(ctx context.Context) error {
-	if _, err := db.ExecContext(ctx, db.dialect.CreateDataMigrationTableSQL(DataMigrationTableName)); err != nil {
+	if _, err := db.ExecContext(ctx, db.dialect.CreateTable(dataMigrationSchema(DataMigrationTableName))); err != nil {
 		return errors.Wrap(err, "failed to create data migration table")
 	}
 
 	return nil
 }
 
+// dataMigrationSchema describes the data-migration state table.
+func dataMigrationSchema(tableName string) dialect.Schema {
+	return dialect.Schema{
+		Table: tableName,
+		Columns: []dialect.Column{
+			{Name: "id", Type: dialect.ColSerial, PrimaryKey: true},
+			{Name: "package", Type: dialect.ColVarchar, Size: packageColumnSize, NotNull: true, Default: "'main'"},
+			{Name: "version_id", Type: dialect.ColBigInt, NotNull: true},
+			{Name: "name", Type: dialect.ColVarchar, Size: 255, NotNull: true, Default: "''"},
+			{Name: "status", Type: dialect.ColVarchar, Size: 32, NotNull: true, Default: "'pending'"},
+			{Name: "checkpoint", Type: dialect.ColText},
+			{Name: "lease_owner", Type: dialect.ColVarchar, Size: 255},
+			{Name: "lease_expires_at", Type: dialect.ColBigInt, NotNull: true, Default: "0"},
+			{Name: "created_at", Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
+			{Name: "updated_at", Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
+		},
+		Unique: [][]string{{"package", "version_id"}},
+	}
+}
+
 // loadDataMigrationState loads the persisted status and checkpoint for a data
 // migration. found is false when no row exists yet.
 func (db *DB) loadDataMigrationState(ctx context.Context, pkgName string, version int64) (status string, cp Checkpoint, found bool, err error) {
-	row := db.QueryRowContext(ctx, db.dialect.SelectDataMigrationSQL(DataMigrationTableName), pkgName, version)
+	q, args := db.dialect.Select(DataMigrationTableName,
+		[]string{"status", "checkpoint"},
+		[]dialect.Col{
+			{Name: "package", Val: pkgName},
+			{Name: "version_id", Val: version},
+		},
+		dialect.SelectOpt{})
+	row := db.QueryRowContext(ctx, q, args...)
 
 	var checkpoint sql.NullString
 	if err := row.Scan(&status, &checkpoint); err != nil {
@@ -43,9 +72,14 @@ func (db *DB) loadDataMigrationState(ctx context.Context, pkgName string, versio
 
 // insertDataMigrationState inserts the initial state row for a data migration.
 func (db *DB) insertDataMigrationState(ctx context.Context, exec SQLExecutor, dm *DataMigration, status string, cp Checkpoint) error {
-	if _, err := exec.ExecContext(ctx,
-		db.dialect.InsertDataMigrationSQL(DataMigrationTableName),
-		dm.Package, dm.Version, dm.Name, status, string(cp)); err != nil {
+	q, args := db.dialect.Insert(DataMigrationTableName, []dialect.Col{
+		{Name: "package", Val: dm.Package},
+		{Name: "version_id", Val: dm.Version},
+		{Name: "name", Val: dm.Name},
+		{Name: "status", Val: status},
+		{Name: "checkpoint", Val: string(cp)},
+	})
+	if _, err := exec.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to insert data migration state")
 	}
 
@@ -59,9 +93,14 @@ func (db *DB) acquireDataMigrationLease(ctx context.Context, dm *DataMigration, 
 	now := time.Now()
 	expiresAt := now.Add(ttl).Unix()
 
-	res, err := db.ExecContext(ctx,
-		db.dialect.AcquireDataMigrationLeaseSQL(DataMigrationTableName),
-		owner, expiresAt, dm.Package, dm.Version, owner, now.Unix())
+	q, args := db.dialect.AcquireLease(DataMigrationTableName,
+		[]dialect.Col{
+			{Name: "package", Val: dm.Package},
+			{Name: "version_id", Val: dm.Version},
+		},
+		owner, expiresAt, now.Unix())
+
+	res, err := db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to acquire data migration lease")
 	}
@@ -77,9 +116,14 @@ func (db *DB) acquireDataMigrationLease(ctx context.Context, dm *DataMigration, 
 // releaseDataMigrationLease sets a terminal status and clears the lease, guarded
 // by ownership (a process that no longer holds the lease is a no-op).
 func (db *DB) releaseDataMigrationLease(ctx context.Context, dm *DataMigration, owner, status string) error {
-	if _, err := db.ExecContext(ctx,
-		db.dialect.ReleaseDataMigrationLeaseSQL(DataMigrationTableName),
-		status, dm.Package, dm.Version, owner); err != nil {
+	q, args := db.dialect.ReleaseLease(DataMigrationTableName, status,
+		[]dialect.Col{
+			{Name: "package", Val: dm.Package},
+			{Name: "version_id", Val: dm.Version},
+		},
+		owner)
+
+	if _, err := db.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to release data migration lease")
 	}
 
@@ -262,9 +306,19 @@ func (db *DB) runDataBatch(ctx context.Context, dm *DataMigration, owner string,
 
 	expiresAt := time.Now().Add(ttl).Unix()
 
-	res, err := tx.ExecContext(ctx,
-		db.dialect.CommitDataBatchSQL(DataMigrationTableName),
-		status, string(next), expiresAt, dm.Package, dm.Version, owner)
+	q, args := db.dialect.CommitLease(DataMigrationTableName,
+		[]dialect.Col{
+			{Name: "status", Val: status},
+			{Name: "checkpoint", Val: string(next)},
+			{Name: "lease_expires_at", Val: expiresAt},
+		},
+		[]dialect.Col{
+			{Name: "package", Val: dm.Package},
+			{Name: "version_id", Val: dm.Version},
+		},
+		owner)
+
+	res, err := tx.ExecContext(ctx, q, args...)
 	if err != nil {
 		return nil, false, rollbackAndLogErr(err, tx, "failed to persist data migration checkpoint")
 	}
