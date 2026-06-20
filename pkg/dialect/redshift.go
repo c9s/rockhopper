@@ -11,7 +11,7 @@ type RedshiftDialect struct {
 // its own tokens.
 func NewRedshiftDialect() *RedshiftDialect {
 	d := &RedshiftDialect{}
-	d.CRUD = NewCRUD(d)
+	d.LeaseCRUD = NewLeaseCRUD(d)
 	return d
 }
 

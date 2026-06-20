@@ -6,11 +6,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// leaseCapable is a dialect that exposes both the core CRUD shapes and the
+// data-migration lease shapes (the OLTP dialects).
+type leaseCapable interface {
+	Builder
+	LeaseBuilder
+}
+
 // builderUnderTest pairs a human-readable name with a CRUD builder so each shape
 // can be asserted against both the "?" and "$N" placeholder styles.
 type builderUnderTest struct {
 	name string
-	b    Builder
+	b    leaseCapable
 }
 
 func builders() []builderUnderTest {

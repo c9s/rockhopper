@@ -4,14 +4,14 @@ import "fmt"
 
 // MySQLDialect implements Dialect for MySQL.
 type MySQLDialect struct {
-	CRUD
+	LeaseCRUD
 }
 
 // NewMySQLDialect constructs a MySQLDialect with its CRUD builder wired to its
 // own tokens.
 func NewMySQLDialect() *MySQLDialect {
 	d := &MySQLDialect{}
-	d.CRUD = NewCRUD(d)
+	d.LeaseCRUD = NewLeaseCRUD(d)
 	return d
 }
 

@@ -4,14 +4,14 @@ import "fmt"
 
 // Sqlite3Dialect implements Dialect for SQLite3.
 type Sqlite3Dialect struct {
-	CRUD
+	LeaseCRUD
 }
 
 // NewSqlite3Dialect constructs a Sqlite3Dialect with its CRUD builder wired to
 // its own tokens.
 func NewSqlite3Dialect() *Sqlite3Dialect {
 	d := &Sqlite3Dialect{}
-	d.CRUD = NewCRUD(d)
+	d.LeaseCRUD = NewLeaseCRUD(d)
 	return d
 }
 
