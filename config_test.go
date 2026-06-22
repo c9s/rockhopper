@@ -18,6 +18,40 @@ func writeTempConfig(t *testing.T, content string) string {
 	return path
 }
 
+func TestLoadConfig_MigratesLegacyMigrationsDir(t *testing.T) {
+	t.Run("legacy-only config becomes a single-element list", func(t *testing.T) {
+		path := writeTempConfig(t, "driver: sqlite3\nmigrationsDir: migrations/sqlite3\n")
+		config, err := LoadConfig(path)
+		if assert.NoError(t, err) {
+			assert.Equal(t, []string{"migrations/sqlite3"}, config.MigrationsDirs)
+		}
+	})
+
+	t.Run("legacy dir is prepended so it stays first", func(t *testing.T) {
+		path := writeTempConfig(t, "driver: mysql\nmigrationsDir: legacy/dir\nmigrationsDirs:\n- modern/a\n- modern/b\n")
+		config, err := LoadConfig(path)
+		if assert.NoError(t, err) {
+			assert.Equal(t, []string{"legacy/dir", "modern/a", "modern/b"}, config.MigrationsDirs)
+		}
+	})
+
+	t.Run("migrationsDirs only is left untouched", func(t *testing.T) {
+		path := writeTempConfig(t, "driver: mysql\nmigrationsDirs:\n- a\n- b\n")
+		config, err := LoadConfig(path)
+		if assert.NoError(t, err) {
+			assert.Equal(t, []string{"a", "b"}, config.MigrationsDirs)
+		}
+	})
+
+	t.Run("no directory configured falls back to migrations", func(t *testing.T) {
+		path := writeTempConfig(t, "driver: sqlite3\n")
+		config, err := LoadConfig(path)
+		if assert.NoError(t, err) {
+			assert.Equal(t, []string{"migrations"}, config.MigrationsDirs)
+		}
+	})
+}
+
 func TestLoadConfig_ExpandsEnv(t *testing.T) {
 	t.Run("braced form", func(t *testing.T) {
 		t.Setenv("MYSQL8_URL", "root@tcp(localhost:3306)/db?parseTime=true")
