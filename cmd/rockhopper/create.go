@@ -40,12 +40,8 @@ func create(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if outputDir == "" && config.MigrationsDir != "" {
-		outputDir = config.MigrationsDir
-	}
-
 	if outputDir == "" {
-		outputDir = "migrations"
+		outputDir = defaultMigrationsDir(config)
 	}
 
 	if !dirExists(outputDir) {
@@ -55,6 +51,19 @@ func create(cmd *cobra.Command, args []string) error {
 	}
 
 	return rockhopper.CreateWithTemplate(outputDir, nil, args[0], templateType)
+}
+
+// defaultMigrationsDir resolves the directory new migration files are written to
+// when --output is not given. LoadConfig migrates the legacy goose-compatible
+// `migrationsDir` into `migrationsDirs`, so that list is the single source of
+// truth here; the first directory is used. It falls back to "migrations" when no
+// directory is configured.
+func defaultMigrationsDir(config *rockhopper.Config) string {
+	if len(config.MigrationsDirs) > 0 {
+		return config.MigrationsDirs[0]
+	}
+
+	return "migrations"
 }
 
 func dirExists(filename string) bool {

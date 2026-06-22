@@ -14,8 +14,17 @@ type Config struct {
 
 	Package string `json:"package" yaml:"package"`
 
+	// MigrationsDir is the legacy single migration directory. It exists for
+	// compatibility with goose, which uses this single-directory field. New
+	// configuration should use MigrationsDirs instead; LoadConfig migrates a
+	// non-empty MigrationsDir into MigrationsDirs.
+	//
+	// Deprecated: use MigrationsDirs.
 	MigrationsDir string `json:"migrationsDir" yaml:"migrationsDir" env:"ROCKHOPPER_MIGRATIONS_DIR"`
 
+	// MigrationsDirs is the list of directories rockhopper scans for migrations.
+	// It supersedes MigrationsDir and supports multiple directories (e.g. one per
+	// package). When creating a new migration, the first directory is used.
 	MigrationsDirs []string `json:"migrationsDirs" yaml:"migrationsDirs" env:"ROCKHOPPER_MIGRATIONS_DIRS"`
 
 	TableName string `json:"tableName" yaml:"tableName" env:"ROCKHOPPER_TABLE_NAME"`
@@ -49,8 +58,21 @@ func LoadConfig(configFile string) (*Config, error) {
 		return nil, err
 	}
 
+	// Migrate the legacy goose-compatible single directory into MigrationsDirs so
+	// the rest of the code only has to consult one field. It is prepended so the
+	// legacy directory stays first, preserving the single-directory expectation of
+	// configs that only set MigrationsDir.
 	if len(config.MigrationsDir) > 0 {
-		config.MigrationsDirs = append(config.MigrationsDirs, config.MigrationsDir)
+		config.MigrationsDirs = append([]string{config.MigrationsDir}, config.MigrationsDirs...)
+	}
+
+	// Fall back to a single default "migrations" directory when none is
+	// configured. Small applications often need only one directory and shouldn't
+	// have to set migrationsDir/migrationsDirs at all. Centralizing the fallback
+	// here keeps every command consistent: create writes to "migrations" and
+	// up/status/down/etc. load from the same place.
+	if len(config.MigrationsDirs) == 0 {
+		config.MigrationsDirs = []string{"migrations"}
 	}
 
 	return &config, err

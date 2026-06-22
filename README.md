@@ -305,8 +305,8 @@ includePackages:                 # Optional: only include these packages
 | `dialect` | same as driver | SQL dialect for query generation. Also supports `tidb` (uses mysql) and `redshift` (uses postgres) |
 | `dsn` | | Data source name / connection string |
 | `package` | `main` | Default migration package name |
-| `migrationsDir` | `migrations` | Single migration directory (use `migrationsDirs` for multiple) |
-| `migrationsDirs` | | List of migration directories |
+| `migrationsDir` | | **Legacy**, for Goose compatibility (Goose uses a single directory). Prefer `migrationsDirs`; a value set here is migrated into `migrationsDirs` as its first entry. |
+| `migrationsDirs` | `migrations` | List of migration directories. `create` writes new migrations to the first directory. |
 | `includePackages` | all | Whitelist of packages to include when loading migrations |
 
 > The version-tracking table is always named `rockhopper_versions` when using the CLI. To use a custom table name, call the library's `Open` / `New` functions directly and pass your own name (see [Go API](#go-api)).
