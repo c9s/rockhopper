@@ -1,92 +1,53 @@
 package dialect
 
-import (
-	"database/sql"
-	"fmt"
-)
+import "fmt"
 
-// Sqlite3Dialect struct.
-type Sqlite3Dialect struct{}
-
-func (m Sqlite3Dialect) GetTableNamesSQL() string {
-	return `SELECT name FROM sqlite_master WHERE type='table'`
+// Sqlite3Dialect implements Dialect for SQLite3.
+type Sqlite3Dialect struct {
+	LeaseCRUD
 }
 
-func (m Sqlite3Dialect) CreateVersionTableSQL(tableName string) string {
-	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                package TEXT NOT NULL DEFAULT 'main',
-            	source_file VARCHAR(255) NOT NULL DEFAULT '',
-                version_id INTEGER NOT NULL,
-                is_applied INTEGER NOT NULL,
-                tstamp TIMESTAMP DEFAULT (datetime('now'))
-            );`, tableName)
+// NewSqlite3Dialect constructs a Sqlite3Dialect with its CRUD builder wired to
+// its own tokens.
+func NewSqlite3Dialect() *Sqlite3Dialect {
+	d := &Sqlite3Dialect{}
+	d.LeaseCRUD = NewLeaseCRUD(d)
+	return d
 }
 
-func (m Sqlite3Dialect) InsertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES (?, ?, ?, ?)", tableName)
+func (d *Sqlite3Dialect) Placeholder(int) string { return "?" }
+func (d *Sqlite3Dialect) NowExpr() string        { return "datetime('now')" }
+func (d *Sqlite3Dialect) TableNames() string {
+	return "SELECT name FROM sqlite_master WHERE type='table'"
 }
 
-func (m Sqlite3Dialect) SelectLastVersionSQL(tableName string) string {
-	return fmt.Sprintf("SELECT MAX(version_id) FROM %s WHERE package = ?", tableName)
-}
+func (d *Sqlite3Dialect) CreateTable(s Schema) string { return buildCreateTable(sqliteDDL{}, s) }
 
-func (m Sqlite3Dialect) QueryVersionsSQL(tableName string) string {
-	return fmt.Sprintf("SELECT package, version_id, is_applied, tstamp FROM %s WHERE package = ? ORDER BY id DESC", tableName)
-}
+// AddColumn is intentionally unsupported for SQLite: the legacy-table migration
+// skips the ALTER on SQLite.
+func (d *Sqlite3Dialect) AddColumn(string, Column) (string, bool) { return "", false }
 
-func (m Sqlite3Dialect) DBVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT id, package, version_id, is_applied from %s ORDER BY id DESC", tableName))
-	if err != nil {
-		return nil, err
+// sqliteDDL renders SQLite DDL types.
+type sqliteDDL struct{}
+
+func (sqliteDDL) sqlType(c Column) string {
+	switch c.Type {
+	case ColSerial:
+		return "INTEGER PRIMARY KEY AUTOINCREMENT"
+	case ColBigInt:
+		return "INTEGER"
+	case ColBool:
+		return "INTEGER"
+	case ColVarchar:
+		return fmt.Sprintf("VARCHAR(%d)", c.Size)
+	case ColText:
+		return "TEXT"
+	case ColTimestamp:
+		return "TIMESTAMP"
 	}
-
-	return rows, err
+	return ""
 }
 
-func (m Sqlite3Dialect) MigrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT id, tstamp, is_applied FROM %s WHERE package = ? AND version_id = ? ORDER BY tstamp DESC LIMIT 1", tableName)
-}
-
-func (m Sqlite3Dialect) DeleteVersionSQL(tableName string) string {
-	return fmt.Sprintf("DELETE FROM %s WHERE package = ? AND version_id = ?", tableName)
-}
-
-func (m Sqlite3Dialect) CreateDataMigrationTableSQL(tableName string) string {
-	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                package TEXT NOT NULL DEFAULT 'main',
-                version_id INTEGER NOT NULL,
-                name TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'pending',
-                checkpoint TEXT,
-                lease_owner TEXT,
-                lease_expires_at INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP DEFAULT (datetime('now')),
-                updated_at TIMESTAMP DEFAULT (datetime('now')),
-                UNIQUE(package, version_id)
-            );`, tableName)
-}
-
-func (m Sqlite3Dialect) InsertDataMigrationSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES (?, ?, ?, ?, ?)", tableName)
-}
-
-func (m Sqlite3Dialect) SelectDataMigrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = ? AND version_id = ?", tableName)
-}
-
-func (m Sqlite3Dialect) AcquireDataMigrationLeaseSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET lease_owner = ?, lease_expires_at = ?, updated_at = datetime('now') "+
-		"WHERE package = ? AND version_id = ? AND (lease_owner IS NULL OR lease_owner = ? OR lease_expires_at < ?)", tableName)
-}
-
-func (m Sqlite3Dialect) CommitDataBatchSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, lease_expires_at = ?, updated_at = datetime('now') "+
-		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
-}
-
-func (m Sqlite3Dialect) ReleaseDataMigrationLeaseSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET status = ?, lease_owner = NULL, lease_expires_at = 0, updated_at = datetime('now') "+
-		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
-}
+func (sqliteDDL) nowDefault() string { return "(datetime('now'))" }
+func (sqliteDDL) ifNotExists() bool  { return true }
+func (sqliteDDL) inlinePK() bool     { return true }

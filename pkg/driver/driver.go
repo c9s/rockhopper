@@ -1,7 +1,7 @@
-// Package driver bundles the supported SQL drivers (MySQL, PostgreSQL and
-// SQLite3) so that importing it registers them with the database/sql package.
-// Each driver lives in its own file guarded by a build tag (no_mysql,
-// no_postgres, no_sqlite3) so it can be excluded at build time.
+// Package driver bundles the supported SQL drivers (MySQL, PostgreSQL, SQLite3
+// and ClickHouse) so that importing it registers them with the database/sql
+// package. Each driver lives in its own file guarded by a build tag (no_mysql,
+// no_postgres, no_sqlite3, no_clickhouse) so it can be excluded at build time.
 //
 // This file carries no build constraints, ensuring the package always has at
 // least one Go file and that NormalizeMySQLDSN is always declared, even when

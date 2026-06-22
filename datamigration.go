@@ -48,6 +48,13 @@ var (
 	// mid-run (the holder stalled past the TTL). The in-flight batch is rolled
 	// back rather than committed.
 	ErrLeaseLost = errors.New("data migration lease lost to another process")
+
+	// ErrDataMigrationUnsupported is returned when the active dialect cannot honor
+	// the conditional-update lease that data migrations rely on (e.g. an OLAP
+	// backend such as ClickHouse, whose UPDATE is an asynchronous mutation with no
+	// synchronous affected-row count). Schema migrations still work on such
+	// dialects; only the data-migration runner is unavailable.
+	ErrDataMigrationUnsupported = errors.New("data migrations are not supported on this dialect")
 )
 
 // leaseOwner identifies this process when claiming leases. It is computed once

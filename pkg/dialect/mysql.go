@@ -1,95 +1,51 @@
 package dialect
 
-import (
-	"database/sql"
-	"fmt"
-)
+import "fmt"
 
-// MySQLDialect struct.
-type MySQLDialect struct{}
-
-func (m MySQLDialect) GetTableNamesSQL() string {
-	return `SHOW TABLES`
+// MySQLDialect implements Dialect for MySQL.
+type MySQLDialect struct {
+	LeaseCRUD
 }
 
-func (m MySQLDialect) CreateVersionTableSQL(tableName string) string {
-	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-                id SERIAL NOT NULL,
-                package VARCHAR(125) NOT NULL DEFAULT 'main',
-    			source_file VARCHAR(255) NOT NULL DEFAULT '',
-                version_id BIGINT NOT NULL,
-                is_applied BOOLEAN NOT NULL,
-                tstamp TIMESTAMP NOT NULL DEFAULT NOW(),
-                PRIMARY KEY(id),
-				UNIQUE unique_version(version_id)
-            );`, tableName)
+// NewMySQLDialect constructs a MySQLDialect with its CRUD builder wired to its
+// own tokens.
+func NewMySQLDialect() *MySQLDialect {
+	d := &MySQLDialect{}
+	d.LeaseCRUD = NewLeaseCRUD(d)
+	return d
 }
 
-func (m MySQLDialect) InsertVersionSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, source_file, version_id, is_applied) VALUES (?, ?, ?, ?)", tableName)
+func (d *MySQLDialect) Placeholder(int) string { return "?" }
+func (d *MySQLDialect) NowExpr() string        { return "NOW()" }
+func (d *MySQLDialect) TableNames() string     { return "SHOW TABLES" }
+
+func (d *MySQLDialect) CreateTable(s Schema) string { return buildCreateTable(mysqlDDL{}, s) }
+
+func (d *MySQLDialect) AddColumn(table string, c Column) (string, bool) {
+	return buildAddColumn(mysqlDDL{}, table, c), true
 }
 
-func (m MySQLDialect) SelectLastVersionSQL(tableName string) string {
-	return fmt.Sprintf("SELECT MAX(version_id) FROM %s WHERE package = ?", tableName)
-}
+// mysqlDDL renders MySQL DDL types.
+type mysqlDDL struct{}
 
-func (m MySQLDialect) QueryVersionsSQL(tableName string) string {
-	return fmt.Sprintf("SELECT package, version_id, is_applied, tstamp FROM %s WHERE package = ? ORDER BY id DESC", tableName)
-}
-
-func (m MySQLDialect) DBVersionQuery(db *sql.DB, tableName string) (*sql.Rows, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT package, version_id, is_applied FROM %s ORDER BY id DESC", tableName))
-	if err != nil {
-		return nil, err
+func (mysqlDDL) sqlType(c Column) string {
+	switch c.Type {
+	case ColSerial:
+		return "SERIAL NOT NULL"
+	case ColBigInt:
+		return "BIGINT"
+	case ColBool:
+		return "BOOLEAN"
+	case ColVarchar:
+		return fmt.Sprintf("VARCHAR(%d)", c.Size)
+	case ColText:
+		return "TEXT"
+	case ColTimestamp:
+		return "TIMESTAMP"
 	}
-
-	return rows, err
+	return ""
 }
 
-func (m MySQLDialect) MigrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT id, tstamp, is_applied FROM %s WHERE package = ? AND version_id = ? ORDER BY tstamp DESC LIMIT 1", tableName)
-}
-
-func (m MySQLDialect) DeleteVersionSQL(tableName string) string {
-	return fmt.Sprintf("DELETE FROM %s WHERE package = ? AND version_id = ?", tableName)
-}
-
-func (m MySQLDialect) CreateDataMigrationTableSQL(tableName string) string {
-	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-                id SERIAL NOT NULL,
-                package VARCHAR(125) NOT NULL DEFAULT 'main',
-                version_id BIGINT NOT NULL,
-                name VARCHAR(255) NOT NULL DEFAULT '',
-                status VARCHAR(32) NOT NULL DEFAULT 'pending',
-                checkpoint TEXT,
-                lease_owner VARCHAR(255),
-                lease_expires_at BIGINT NOT NULL DEFAULT 0,
-                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                PRIMARY KEY(id),
-                UNIQUE KEY uniq_data_migration (package, version_id)
-            );`, tableName)
-}
-
-func (m MySQLDialect) InsertDataMigrationSQL(tableName string) string {
-	return fmt.Sprintf("INSERT INTO %s (package, version_id, name, status, checkpoint) VALUES (?, ?, ?, ?, ?)", tableName)
-}
-
-func (m MySQLDialect) SelectDataMigrationSQL(tableName string) string {
-	return fmt.Sprintf("SELECT status, checkpoint FROM %s WHERE package = ? AND version_id = ?", tableName)
-}
-
-func (m MySQLDialect) AcquireDataMigrationLeaseSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET lease_owner = ?, lease_expires_at = ?, updated_at = NOW() "+
-		"WHERE package = ? AND version_id = ? AND (lease_owner IS NULL OR lease_owner = ? OR lease_expires_at < ?)", tableName)
-}
-
-func (m MySQLDialect) CommitDataBatchSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET status = ?, checkpoint = ?, lease_expires_at = ?, updated_at = NOW() "+
-		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
-}
-
-func (m MySQLDialect) ReleaseDataMigrationLeaseSQL(tableName string) string {
-	return fmt.Sprintf("UPDATE %s SET status = ?, lease_owner = NULL, lease_expires_at = 0, updated_at = NOW() "+
-		"WHERE package = ? AND version_id = ? AND lease_owner = ?", tableName)
-}
+func (mysqlDDL) nowDefault() string { return "NOW()" }
+func (mysqlDDL) ifNotExists() bool  { return true }
+func (mysqlDDL) inlinePK() bool     { return false }
