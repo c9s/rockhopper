@@ -36,6 +36,7 @@
   - [`align` — Align migration version](#align--align-migration-version)
 - [Configuration](#configuration)
 - [SQL Migration Format](#sql-migration-format)
+- [Go Code-Based Migrations](#go-code-based-migrations)
 - [Multi-Dialect Workflow](#multi-dialect-workflow)
 - [Compiling Migrations into Go](#compiling-migrations-into-go)
 - [Go API](#go-api)
@@ -427,6 +428,157 @@ DROP TABLE invoices;
 
 The default package name is `main`. Use `includePackages` in your config to selectively apply only certain packages.
 
+## Go Code-Based Migrations
+
+When a migration needs real program logic — branching on data, calling into your
+application packages, reading a file, transforming rows in Go — write it as a **Go
+migration** instead of a SQL file. A Go migration is an ordinary Go function that
+registers itself with rockhopper at `init()` time and receives a transaction to run
+statements against.
+
+> SQL migrations cover most schema changes and are easier to read in a diff. Reach for
+> Go migrations only when you need control flow that SQL can't express.
+
+### 1. Generate a Go migration file
+
+```sh
+rockhopper --config rockhopper_mysql.yaml create --type go add_users
+# -> migrations/mysql/20240116231445_add_users.go
+```
+
+The timestamp prefix is **not cosmetic**: `AddMigration` derives the migration's
+version from the *file name* (via `runtime.Caller`), and the package name from the
+Go package the file lives in. Keep the `{timestamp}_{description}.go` naming — the same
+convention as SQL migrations — or registration will fail to parse a version.
+
+### 2. Fill in the up/down functions
+
+Each migration registers a pair of functions from `init()`. The executor passed in is
+a live transaction (rockhopper wraps the migration in `BEGIN`/`COMMIT` by default and
+rolls back automatically if you return an error):
+
+```go
+package migrations
+
+import (
+    "context"
+
+    "github.com/c9s/rockhopper/v2"
+)
+
+func init() {
+    rockhopper.AddMigration(upAddUsers, downAddUsers)
+}
+
+func upAddUsers(ctx context.Context, tx rockhopper.SQLExecutor) error {
+    if _, err := tx.ExecContext(ctx, `
+        CREATE TABLE users (
+            id    BIGINT PRIMARY KEY,
+            name  VARCHAR(128) NOT NULL,
+            email VARCHAR(255) NOT NULL
+        )`); err != nil {
+        return err
+    }
+
+    // Logic a plain SQL file can't express: seed rows computed in Go.
+    for i, name := range []string{"alice", "bob", "carol"} {
+        if _, err := tx.ExecContext(ctx,
+            "INSERT INTO users (id, name, email) VALUES (?, ?, ?)",
+            i+1, name, name+"@example.com",
+        ); err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
+func downAddUsers(ctx context.Context, tx rockhopper.SQLExecutor) error {
+    _, err := tx.ExecContext(ctx, "DROP TABLE users")
+    return err
+}
+```
+
+`SQLExecutor` is just the `ExecContext` method, so the same body works whether the
+underlying executor is a `*sql.Tx` or a `*sql.DB`. Migrations registered with
+`AddMigration` always run inside a transaction; for statements that can't run in one
+(e.g. `CREATE INDEX CONCURRENTLY` on PostgreSQL), use a SQL migration with the `-- !txn`
+annotation instead — see [Non-transactional migrations](#non-transactional-migrations).
+
+### 3. Register the package and run
+
+Registration happens as a side effect of the package's `init()`, so the package must be
+imported somewhere in your build. Then run the registered Go migrations:
+
+```go
+package main
+
+import (
+    "context"
+
+    "github.com/c9s/rockhopper/v2"
+
+    // Blank import: pulls the package in so its init() registers the migrations.
+    _ "github.com/yourorg/yourapp/migrations"
+)
+
+func main() {
+    ctx := context.Background()
+
+    db, err := rockhopper.OpenWithEnv("MYAPP") // MYAPP_DRIVER / MYAPP_DIALECT / MYAPP_DSN
+    if err != nil {
+        panic(err)
+    }
+    defer db.Close()
+
+    if err := db.Touch(ctx); err != nil { // create the version table if needed
+        panic(err)
+    }
+
+    // Apply every registered Go migration in the "migrations" package.
+    if err := rockhopper.UpgradeFromGo(ctx, db, "github.com/yourorg/yourapp/migrations"); err != nil {
+        panic(err)
+    }
+}
+```
+
+`UpgradeFromGo(ctx, db, packageNames...)` applies all registered Go migrations whose
+package matches one of the given names. For finer control, load them yourself and drive
+the linked list directly:
+
+```go
+loader := &rockhopper.GoMigrationLoader{}
+
+migrations, err := loader.Load() // every registered Go migration, sorted
+if err != nil {
+    return err
+}
+
+// Or scope to one package:
+migrations, err = loader.LoadByExactPackage("github.com/yourorg/yourapp/migrations")
+
+migrations = migrations.SortAndConnect()
+if err := rockhopper.Up(ctx, db, migrations.Head(), 0); err != nil {
+    return err
+}
+```
+
+### SQL vs Go migrations at a glance
+
+| | SQL migration | Go migration |
+| --- | --- | --- |
+| File | `*.sql` with `-- +up` / `-- +down` | `*.go` calling `AddMigration` in `init()` |
+| Created by | `create --type sql` | `create --type go` |
+| Version source | file name | file name (via `runtime.Caller`) |
+| Package source | `-- @package` (default `main`) | the Go package path |
+| Best for | declarative DDL/DML | data transforms, branching, calling app code |
+| Embeddable | yes (via `compile`) | yes (already Go) |
+
+Because Go migrations are already Go, they don't need the `compile` step — they embed in
+your binary as soon as the package is imported. The `compile` command exists to turn
+*SQL* migrations into this same registered form (see
+[Compiling Migrations into Go](#compiling-migrations-into-go)).
+
 ## Multi-Dialect Workflow
 
 When supporting multiple databases (e.g. MySQL and SQLite), maintain separate config files and migration directories:
@@ -590,7 +742,8 @@ migrations, err := loader.Load("migrations/mysql")
 
 ### Registering Go Migrations
 
-For Go-based migrations (instead of SQL files), register them from `init()`:
+For Go-based migrations (instead of SQL files), register them from `init()`. See
+[Go Code-Based Migrations](#go-code-based-migrations) for the full tutorial; in short:
 
 ```go
 package migrations

@@ -30,5 +30,9 @@ If `up` fails with an "out-of-order migrations detected" error, it means a pendi
 
 If the user needs to override the DSN or driver, remind them they can set:
 - `ROCKHOPPER_DRIVER` - database driver name
-- `ROCKHOPPER_DIALECT` - SQL dialect name
+- `ROCKHOPPER_DIALECT` - SQL dialect name; one of `postgres`, `mysql`, `sqlite3`, `tidb`, `redshift`, `clickhouse`
 - `ROCKHOPPER_DSN` - data source name connection string
+
+## Dialect notes
+
+All listed dialects support schema migrations (`up`/`down`/`status`). Data migrations (the lease-based backfill API) require conditional `UPDATE ... RETURNING RowsAffected==1` semantics and are therefore **not** supported on ClickHouse, which is capability-gated and returns `ErrDataMigrationUnsupported`.
