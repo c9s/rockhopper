@@ -198,13 +198,14 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 
 	// dependency gate: the mapped schema migration must be applied first.
 	if dm.After > 0 {
-		applied, err := db.isSchemaVersionApplied(ctx, dm.Package, dm.After)
+		afterPkg := dm.afterPackage()
+		applied, err := db.isSchemaVersionApplied(ctx, afterPkg, dm.After)
 		if err != nil {
 			return err
 		}
 
 		if !applied {
-			return fmt.Errorf("data migration %s depends on schema version %d which is not applied yet", dm, dm.After)
+			return fmt.Errorf("data migration %s depends on schema version %s:%d which is not applied yet", dm, afterPkg, dm.After)
 		}
 	}
 

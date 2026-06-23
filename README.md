@@ -880,6 +880,25 @@ func init() {
 }
 ```
 
+A data migration belongs to a **package**, the same namespace your schema
+migrations use. `AddDataMigration` defaults the package to `"main"` (the default
+package of SQL scripts), so a Go data migration registered alongside plain SQL
+migrations lands in the same namespace by default. When your schema lives in a
+different package, set it together with the name:
+
+```go
+rockhopper.WithDataMigrationName("backfill_users", "orders"),  // name + package
+```
+
+The `After` dependency is resolved **within the data migration's own package**.
+Pass a package as the second argument to depend on a schema version in a
+*different* package:
+
+```go
+rockhopper.After(20240116231445)          // schema version 20240116231445 in this migration's package
+rockhopper.After(20240116231445, "core")  // ... in the "core" package instead
+```
+
 Then drive them to completion. Each call is safe to repeat: completed migrations
 are skipped and interrupted ones resume.
 
