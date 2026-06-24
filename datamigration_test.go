@@ -221,7 +221,8 @@ func TestRunDataMigration_LeaseHeldByAnother(t *testing.T) {
 	seedUsers(t, db, 25)
 
 	mig := &backfillMigrator{table: "users", batchSize: 10}
-	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000021, Migrator: mig}
+	// LeaseWait < 0 disables waiting so a held lease is reported immediately.
+	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000021, Migrator: mig, LeaseWait: -1}
 
 	// another process holds a live lease.
 	future := time.Now().Add(1 * time.Hour).Unix()
@@ -260,6 +261,109 @@ func TestRunDataMigration_StealsExpiredLease(t *testing.T) {
 	owner, _, status := leaseState(t, db, dm)
 	assert.Equal(t, DataMigrationCompleted, status)
 	assert.False(t, owner.Valid)
+}
+
+func TestLeaseWait(t *testing.T) {
+	// zero -> 2 * the effective TTL (default TTL here).
+	assert.Equal(t, 2*DefaultLeaseTTL, (&DataMigration{}).leaseWait())
+	// zero with a custom TTL -> 2 * that TTL.
+	assert.Equal(t, 20*time.Second, (&DataMigration{LeaseTTL: 10 * time.Second}).leaseWait())
+	// negative disables waiting.
+	assert.Equal(t, time.Duration(0), (&DataMigration{LeaseWait: -1}).leaseWait())
+	// explicit value is used as-is.
+	assert.Equal(t, 90*time.Second, (&DataMigration{LeaseWait: 90 * time.Second}).leaseWait())
+}
+
+func TestLeasePollInterval(t *testing.T) {
+	assert.Equal(t, time.Second, (&DataMigration{LeaseTTL: 2 * time.Second}).leasePollInterval(), "TTL/4 clamped up to 1s floor")
+	assert.Equal(t, 3*time.Second, (&DataMigration{LeaseTTL: 12 * time.Second}).leasePollInterval(), "TTL/4 within range")
+	assert.Equal(t, 5*time.Second, (&DataMigration{LeaseTTL: time.Minute}).leasePollInterval(), "TTL/4 clamped to 5s ceiling")
+}
+
+// TestRunDataMigration_WaitsForStaleLeaseToExpire covers the crashed-predecessor
+// case: a held lease that expires shortly after the new process starts. The new
+// process must wait it out and take over rather than skipping immediately.
+func TestRunDataMigration_WaitsForStaleLeaseToExpire(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 25)
+
+	mig := &backfillMigrator{table: "users", batchSize: 10}
+	dm := &DataMigration{
+		Package:   DefaultPackageName,
+		Version:   1700000000000030,
+		Migrator:  mig,
+		LeaseTTL:  4 * time.Second, // -> 1s poll interval
+		LeaseWait: 10 * time.Second,
+	}
+
+	// a crashed predecessor's lease expires ~1s from now (integer-second
+	// granularity means it becomes acquirable within a couple of polls).
+	expiresSoon := time.Now().Add(1 * time.Second).Unix()
+	seedDataMigrationRow(t, db, dm, DataMigrationRunning, mustCursor(t, 0, 25), "dead-pod", expiresSoon)
+
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+
+	assert.Equal(t, 25, countMigrated(t, db))
+	assert.Equal(t, 0, mig.planCalls, "running status with a checkpoint resumes rather than re-planning")
+
+	owner, _, status := leaseState(t, db, dm)
+	assert.Equal(t, DataMigrationCompleted, status)
+	assert.False(t, owner.Valid)
+}
+
+// TestRunDataMigration_WaitTimesOutWhileLeaseHeld covers a live holder: the lease
+// never expires within the wait window, so the new process correctly gives up
+// with ErrLeaseHeld instead of double-running.
+func TestRunDataMigration_WaitTimesOutWhileLeaseHeld(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 25)
+
+	mig := &backfillMigrator{table: "users", batchSize: 10}
+	dm := &DataMigration{
+		Package:   DefaultPackageName,
+		Version:   1700000000000031,
+		Migrator:  mig,
+		LeaseTTL:  4 * time.Second,
+		LeaseWait: 2 * time.Second, // shorter than the lease's remaining life
+	}
+
+	future := time.Now().Add(1 * time.Hour).Unix()
+	seedDataMigrationRow(t, db, dm, DataMigrationRunning, mustCursor(t, 0, 25), "live-pod", future)
+
+	start := time.Now()
+	err := RunDataMigration(ctx, db, dm)
+	assert.ErrorIs(t, err, ErrLeaseHeld)
+	assert.GreaterOrEqual(t, time.Since(start), 2*time.Second, "should have waited the full window before giving up")
+
+	assert.Equal(t, 0, countMigrated(t, db))
+	owner, _, _ := leaseState(t, db, dm)
+	assert.Equal(t, "live-pod", owner.String, "the live holder's lease is left untouched")
+}
+
+// TestRunDataMigration_WaitDisabledSkipsImmediately covers LeaseWait < 0: a held
+// lease is reported without waiting.
+func TestRunDataMigration_WaitDisabledSkipsImmediately(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 25)
+
+	mig := &backfillMigrator{table: "users", batchSize: 10}
+	dm := &DataMigration{
+		Package:   DefaultPackageName,
+		Version:   1700000000000032,
+		Migrator:  mig,
+		LeaseWait: -1,
+	}
+
+	future := time.Now().Add(1 * time.Hour).Unix()
+	seedDataMigrationRow(t, db, dm, DataMigrationRunning, mustCursor(t, 0, 25), "live-pod", future)
+
+	start := time.Now()
+	err := RunDataMigration(ctx, db, dm)
+	assert.ErrorIs(t, err, ErrLeaseHeld)
+	assert.Less(t, time.Since(start), time.Second, "must not wait when waiting is disabled")
 }
 
 // leaseStealingMigrator mutates the lease owner from inside a batch to simulate

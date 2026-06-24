@@ -186,6 +186,15 @@ type DataMigration struct {
 	// DefaultLeaseTTL. It must exceed a single batch's duration plus Throttle.
 	LeaseTTL time.Duration
 
+	// LeaseWait is how long to keep retrying lease acquisition when another
+	// process holds it, before giving up with ErrLeaseHeld. It lets a freshly
+	// started process wait out a stale lease left by a crashed predecessor
+	// (which becomes acquirable LeaseTTL after that predecessor's last batch).
+	// Zero means a default of 2*LeaseTTL — long enough that a dead holder's
+	// lease is guaranteed to expire while a live holder keeps renewing it. A
+	// negative value disables waiting (acquisition is attempted once).
+	LeaseWait time.Duration
+
 	// BackoffLimit is the number of times a failed batch is retried (with an
 	// exponential backoff pause) within a single run before the migration gives
 	// up and is marked failed. Zero means DefaultBackoffLimit; a negative value
@@ -248,6 +257,37 @@ func (dm *DataMigration) leaseTTL() time.Duration {
 	}
 
 	return DefaultLeaseTTL
+}
+
+// leaseWait returns how long to keep retrying lease acquisition, applying the
+// 2*LeaseTTL default for the zero value and clamping a negative value to zero
+// (acquire once, no waiting).
+func (dm *DataMigration) leaseWait() time.Duration {
+	if dm.LeaseWait < 0 {
+		return 0
+	}
+
+	if dm.LeaseWait == 0 {
+		return 2 * dm.leaseTTL()
+	}
+
+	return dm.LeaseWait
+}
+
+// leasePollInterval is the pause between lease-acquisition retries while
+// waiting. It is a quarter of the TTL, clamped to [1s, 5s], so a stale lease is
+// noticed promptly without hammering the database.
+func (dm *DataMigration) leasePollInterval() time.Duration {
+	iv := dm.leaseTTL() / 4
+	if iv < time.Second {
+		return time.Second
+	}
+
+	if iv > 5*time.Second {
+		return 5 * time.Second
+	}
+
+	return iv
 }
 
 // logEntry returns a logrus entry pre-populated with the data-migrator
@@ -318,6 +358,15 @@ func WithDataMigrationName(name string, packageName ...string) DataMigrationOpti
 func WithLeaseTTL(d time.Duration) DataMigrationOption {
 	return func(dm *DataMigration) {
 		dm.LeaseTTL = d
+	}
+}
+
+// WithLeaseWait sets how long to keep retrying lease acquisition when another
+// process holds the lease, before giving up with ErrLeaseHeld. Zero uses the
+// default of 2*LeaseTTL; a negative value disables waiting (acquire once).
+func WithLeaseWait(d time.Duration) DataMigrationOption {
+	return func(dm *DataMigration) {
+		dm.LeaseWait = d
 	}
 }
 

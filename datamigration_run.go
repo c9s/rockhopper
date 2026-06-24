@@ -130,6 +130,60 @@ func (db *DB) acquireDataMigrationLease(ctx context.Context, dm *DataMigration, 
 	return affected == 1, nil
 }
 
+// acquireDataMigrationLeaseWaiting claims the lease, retrying for up to
+// dm.leaseWait() when another process holds it. A crashed predecessor leaves a
+// lease that becomes acquirable once it expires (LeaseTTL after its last batch),
+// so waiting longer than the TTL lets a fresh process take over a dead holder's
+// work while still correctly yielding to a live holder, which keeps renewing and
+// is never reclaimed within the window. It returns false (no error) if the lease
+// is still held when the wait elapses.
+func (db *DB) acquireDataMigrationLeaseWaiting(ctx context.Context, dm *DataMigration, owner string, ttl time.Duration, logger *log.Entry) (bool, error) {
+	acquired, err := db.acquireDataMigrationLease(ctx, dm, owner, ttl)
+	if err != nil || acquired {
+		return acquired, err
+	}
+
+	wait := dm.leaseWait()
+	if wait <= 0 {
+		return false, nil
+	}
+
+	interval := dm.leasePollInterval()
+	start := time.Now()
+	deadline := start.Add(wait)
+	logger.WithFields(log.Fields{"wait": wait, "poll_interval": interval}).
+		Info("data migration lease held by another process, waiting for it to be released or to expire")
+
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return false, nil
+		}
+
+		sleep := interval
+		if sleep > remaining {
+			sleep = remaining
+		}
+
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(sleep):
+		}
+
+		acquired, err := db.acquireDataMigrationLease(ctx, dm, owner, ttl)
+		if err != nil {
+			return false, err
+		}
+
+		if acquired {
+			logger.WithField("waited", time.Since(start)).
+				Info("data migration lease acquired after waiting (took over a stale lease)")
+			return true, nil
+		}
+	}
+}
+
 // releaseDataMigrationLease sets a terminal status and clears the lease, guarded
 // by ownership (a process that no longer holds the lease is a no-op).
 func (db *DB) releaseDataMigrationLease(ctx context.Context, dm *DataMigration, owner, status string) error {
@@ -250,7 +304,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 	owner := leaseOwner()
 	ttl := dm.leaseTTL()
 
-	acquired, err := db.acquireDataMigrationLease(ctx, dm, owner, ttl)
+	acquired, err := db.acquireDataMigrationLeaseWaiting(ctx, dm, owner, ttl, logger)
 	if err != nil {
 		return err
 	}
