@@ -196,6 +196,9 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		return err
 	}
 
+	logger := dm.logEntry()
+	logger.Debug("starting data migration run")
+
 	// dependency gate: the mapped schema migration must be applied first.
 	if dm.After > 0 {
 		afterPkg := dm.afterPackage()
@@ -205,8 +208,13 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		}
 
 		if !applied {
+			logger.WithFields(log.Fields{"after_package": afterPkg, "after_version": dm.After}).
+				Warn("data migration blocked: schema dependency not applied yet")
 			return fmt.Errorf("data migration %s depends on schema version %s:%d which is not applied yet", dm, afterPkg, dm.After)
 		}
+
+		logger.WithFields(log.Fields{"after_package": afterPkg, "after_version": dm.After}).
+			Debug("schema dependency satisfied")
 	}
 
 	status, _, found, err := db.loadDataMigrationState(ctx, dm.Package, dm.Version)
@@ -215,7 +223,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 	}
 
 	if found && status == DataMigrationCompleted {
-		log.Infof("data migration %s already completed, skipping", dm)
+		logger.Info("data migration already completed, skipping")
 		return nil
 	}
 
@@ -233,7 +241,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 			}
 
 			if status == DataMigrationCompleted {
-				log.Infof("data migration %s already completed, skipping", dm)
+				logger.Info("data migration already completed, skipping")
 				return nil
 			}
 		}
@@ -248,9 +256,11 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 	}
 
 	if !acquired {
-		log.Infof("data migration %s is driven by another process, skipping", dm)
+		logger.Info("data migration is driven by another process, skipping")
 		return ErrLeaseHeld
 	}
+
+	logger.WithFields(log.Fields{"lease_owner": owner, "lease_ttl": ttl}).Debug("data migration lease acquired")
 
 	// we hold the lease; reload the authoritative status and checkpoint (a
 	// stolen lease resumes from the previous owner's last committed batch).
@@ -260,7 +270,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 	}
 
 	if status == DataMigrationCompleted {
-		log.Infof("data migration %s already completed, skipping", dm)
+		logger.Info("data migration already completed, skipping")
 		return db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationCompleted)
 	}
 
@@ -270,22 +280,28 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		// so repeating it is safe, and it guarantees Batch never receives an
 		// empty checkpoint unless the migrator's own Plan returns one — sparing
 		// callers from json.Unmarshal failing on an empty payload.
+		logger.Info("planning data migration")
 		cp, err = dm.Migrator.Plan(ctx, db.DB)
 		if err != nil {
 			if rerr := db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationFailed); rerr != nil {
-				log.WithError(rerr).Warnf("failed to release lease for data migration %s after plan error", dm)
+				logger.WithError(rerr).Warn("failed to release lease after plan error")
 			}
 
 			return fmt.Errorf("data migration %s: plan failed: %w", dm, err)
 		}
+
+		logger.WithField("checkpoint_bytes", len(cp)).Debug("data migration planned")
 	} else {
-		log.Infof("resuming data migration %s from checkpoint", dm)
+		logger.WithField("checkpoint_bytes", len(cp)).Info("resuming data migration from stored checkpoint")
 	}
 
 	// attempts counts consecutive batch failures; it resets whenever a batch
 	// commits successfully, so the backoff limit bounds retries of a stuck
-	// batch, not transient failures spread across a long migration.
+	// batch, not transient failures spread across a long migration. batches
+	// counts committed batches for progress logging.
 	attempts := 0
+	batches := 0
+	startedAt := time.Now()
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -295,6 +311,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		if err != nil {
 			if errors.Is(err, ErrLeaseLost) {
 				// another process owns the migration now; leave its state alone.
+				logger.WithField("batches", batches).Warn("data migration lease lost to another process")
 				return err
 			}
 
@@ -302,7 +319,8 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 			attempts++
 			if attempts <= limit {
 				delay := dm.backoffDelay(attempts)
-				log.WithError(err).Warnf("data migration %s: batch failed (attempt %d/%d), retrying in %s", dm, attempts, limit, delay)
+				logger.WithError(err).WithFields(log.Fields{"attempt": attempts, "limit": limit, "retry_in": delay}).
+					Warn("data migration batch failed, retrying after backoff")
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -313,17 +331,24 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 			}
 
 			if rerr := db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationFailed); rerr != nil {
-				log.WithError(rerr).Warnf("failed to mark data migration %s as failed", dm)
+				logger.WithError(rerr).Warn("failed to mark data migration as failed")
 			}
 
+			logger.WithError(err).WithFields(log.Fields{"attempts": attempts, "batches": batches}).
+				Error("data migration failed: batch retries exhausted")
 			return fmt.Errorf("data migration %s: batch failed after %d attempt(s): %w", dm, attempts, err)
 		}
 
 		attempts = 0
+		batches++
 		cp = next
 
+		logger.WithFields(log.Fields{"batch": batches, "checkpoint_bytes": len(cp), "done": done}).
+			Debug("data migration batch committed")
+
 		if done {
-			log.Infof("data migration %s completed", dm)
+			logger.WithFields(log.Fields{"batches": batches, "elapsed": time.Since(startedAt)}).
+				Info("data migration completed")
 			return db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationCompleted)
 		}
 
@@ -399,6 +424,9 @@ func (db *DB) runDataBatch(ctx context.Context, dm *DataMigration, owner string,
 
 // RunDataMigrations runs the given data migrations in version order.
 func RunDataMigrations(ctx context.Context, db *DB, dms []*DataMigration) error {
+	log.WithFields(log.Fields{"component": dataMigratorComponent, "count": len(dms)}).
+		Debug("running data migrations")
+
 	for _, dm := range dms {
 		if err := RunDataMigration(ctx, db, dm); err != nil {
 			return err
