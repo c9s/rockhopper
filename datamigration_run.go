@@ -264,20 +264,28 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		return db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationCompleted)
 	}
 
-	if status == DataMigrationPending {
-		// first run: compute the starting checkpoint.
+	if status == DataMigrationPending || len(cp) == 0 {
+		// First run, or a prior attempt failed before persisting any progress:
+		// (re)compute the starting checkpoint. Plan is read-only and idempotent,
+		// so repeating it is safe, and it guarantees Batch never receives an
+		// empty checkpoint unless the migrator's own Plan returns one — sparing
+		// callers from json.Unmarshal failing on an empty payload.
 		cp, err = dm.Migrator.Plan(ctx, db.DB)
 		if err != nil {
 			if rerr := db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationFailed); rerr != nil {
 				log.WithError(rerr).Warnf("failed to release lease for data migration %s after plan error", dm)
 			}
 
-			return errors.Wrapf(err, "data migration %s: plan failed", dm)
+			return fmt.Errorf("data migration %s: plan failed: %w", dm, err)
 		}
 	} else {
 		log.Infof("resuming data migration %s from checkpoint", dm)
 	}
 
+	// attempts counts consecutive batch failures; it resets whenever a batch
+	// commits successfully, so the backoff limit bounds retries of a stuck
+	// batch, not transient failures spread across a long migration.
+	attempts := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -290,13 +298,28 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 				return err
 			}
 
+			limit := dm.backoffLimit()
+			attempts++
+			if attempts <= limit {
+				delay := dm.backoffDelay(attempts)
+				log.WithError(err).Warnf("data migration %s: batch failed (attempt %d/%d), retrying in %s", dm, attempts, limit, delay)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(delay):
+				}
+
+				continue
+			}
+
 			if rerr := db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationFailed); rerr != nil {
 				log.WithError(rerr).Warnf("failed to mark data migration %s as failed", dm)
 			}
 
-			return errors.Wrapf(err, "data migration %s: batch failed", dm)
+			return fmt.Errorf("data migration %s: batch failed after %d attempt(s): %w", dm, attempts, err)
 		}
 
+		attempts = 0
 		cp = next
 
 		if done {

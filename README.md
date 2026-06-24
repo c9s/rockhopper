@@ -917,6 +917,21 @@ checkpoint), then loops `Batch` — committing each batch with its checkpoint an
 pausing for `Throttle` — until the migrator reports `done`. Cancel the `ctx` to
 stop between batches; the next run picks up where it left off.
 
+If a batch returns an error, the runner retries it after an exponential backoff
+pause, up to `BackoffLimit` times (default `3`), before marking the migration
+failed and returning the error. Tune it per migration:
+
+```go
+rockhopper.WithBackoffLimit(5),                  // retry a failing batch up to 5 times
+rockhopper.WithBackoffDelay(2*time.Second),      // base pause, doubled each retry
+// rockhopper.WithBackoffLimit(-1)               // disable retries (fail on first error)
+```
+
+A run that finds an empty stored checkpoint (e.g. a prior attempt failed before
+`Plan` persisted anything) re-invokes `Plan` before batching, so `Batch` never
+receives an empty checkpoint unless `Plan` itself returns one — a JSON
+checkpoint can be `json.Unmarshal`ed without guarding against an empty payload.
+
 ## Environment Variables
 
 You can override config file values with environment variables:
