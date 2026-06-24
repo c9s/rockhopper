@@ -20,6 +20,11 @@ import (
 // table (TableName) so the schema runner's done/not-done semantics stay intact.
 const DataMigrationTableName = "rockhopper_data_migrations"
 
+// dataMigratorComponent is the value of the "component" log field stamped on
+// every data-migration log line, so operators can filter the data-migrator's
+// output apart from the schema runner's.
+const dataMigratorComponent = "data_migrator"
+
 // Data migration status values stored in the status column.
 const (
 	// DataMigrationPending means the migration has a row but no batch has run yet.
@@ -243,6 +248,23 @@ func (dm *DataMigration) leaseTTL() time.Duration {
 	}
 
 	return DefaultLeaseTTL
+}
+
+// logEntry returns a logrus entry pre-populated with the data-migrator
+// component tag and this migration's identity, so every phase/progress line
+// carries consistent, filterable structured fields.
+func (dm *DataMigration) logEntry() *log.Entry {
+	fields := log.Fields{
+		"component": dataMigratorComponent,
+		"package":   dm.Package,
+		"version":   dm.Version,
+	}
+
+	if dm.Name != "" {
+		fields["name"] = dm.Name
+	}
+
+	return log.WithFields(fields)
 }
 
 func (dm *DataMigration) String() string {

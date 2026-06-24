@@ -932,6 +932,14 @@ A run that finds an empty stored checkpoint (e.g. a prior attempt failed before
 receives an empty checkpoint unless `Plan` itself returns one — a JSON
 checkpoint can be `json.Unmarshal`ed without guarding against an empty payload.
 
+Every data-migration log line carries the structured field
+`component=data_migrator` along with `package` and `version`, so you can filter
+the data migrator's phase/progress output apart from the schema runner's. Phase
+transitions (planning, resuming, completed, skipped, lease held/lost, retries)
+log at `info`/`warn`; per-batch progress (`batch`, `checkpoint_bytes`, `done`)
+logs at `debug` — raise the logrus level to `debug` to follow batch-by-batch
+progress on a long backfill.
+
 ## Environment Variables
 
 You can override config file values with environment variables:
