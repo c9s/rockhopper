@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -143,10 +142,16 @@ type DataMigration struct {
 	// Migrator holds the user-provided batch logic.
 	Migrator DataMigrator
 
-	// After is the schema migration version (same package) that must be applied
-	// before this data migration becomes eligible to run. Zero means no
-	// dependency.
+	// After is the schema migration version that must be applied before this
+	// data migration becomes eligible to run. Zero means no dependency. The
+	// schema version is looked up in AfterPackage (see afterPackage).
 	After int64
+
+	// AfterPackage is the package of the schema migration named by After. When
+	// empty, the dependency is resolved against this data migration's own
+	// Package (see afterPackage). Set it to depend on a schema version in a
+	// different package.
+	AfterPackage string
 
 	// Throttle is the pause inserted between batches to limit load and
 	// replication lag. Zero means no pause.
@@ -156,6 +161,19 @@ type DataMigration struct {
 	// may steal it. It is renewed on every batch commit. Zero means
 	// DefaultLeaseTTL. It must exceed a single batch's duration plus Throttle.
 	LeaseTTL time.Duration
+}
+
+// afterPackage returns the package that the After schema version is looked up
+// in: the explicitly configured AfterPackage when set, otherwise the data
+// migration's own Package (which defaults to DefaultPackageName). This lets
+// After(version) target the data migration's package without restating it,
+// while After(version, pkg) targets a different package.
+func (dm *DataMigration) afterPackage() string {
+	if dm.AfterPackage != "" {
+		return dm.AfterPackage
+	}
+
+	return dm.Package
 }
 
 func (dm *DataMigration) leaseTTL() time.Duration {
@@ -178,10 +196,16 @@ func (dm *DataMigration) String() string {
 type DataMigrationOption func(*DataMigration)
 
 // After declares that the data migration may only run once the given schema
-// migration version (in the same package) has been applied.
-func After(schemaVersion int64) DataMigrationOption {
+// migration version has been applied. Without packageName, the version is
+// looked up in the data migration's own package (which defaults to
+// DefaultPackageName); pass packageName to depend on a schema version in a
+// different package. Only the first packageName is used.
+func After(schemaVersion int64, packageName ...string) DataMigrationOption {
 	return func(dm *DataMigration) {
 		dm.After = schemaVersion
+		if len(packageName) > 0 {
+			dm.AfterPackage = packageName[0]
+		}
 	}
 }
 
@@ -192,10 +216,16 @@ func WithThrottle(d time.Duration) DataMigrationOption {
 	}
 }
 
-// WithDataMigrationName sets a human-readable description.
-func WithDataMigrationName(name string) DataMigrationOption {
+// WithDataMigrationName sets a human-readable description and, optionally, the
+// data migration's package. Passing the package here is a convenience for the
+// common case of aligning the data migration with the SQL/schema package it
+// sits beside (e.g. "main"). Only the first packageName is used.
+func WithDataMigrationName(name string, packageName ...string) DataMigrationOption {
 	return func(dm *DataMigration) {
 		dm.Name = name
+		if len(packageName) > 0 {
+			dm.Package = packageName[0]
+		}
 	}
 }
 
@@ -213,20 +243,14 @@ func WithLeaseTTL(d time.Duration) DataMigrationOption {
 var registeredDataMigrations = map[RegistryKey]*DataMigration{}
 
 // AddDataMigration registers a data migration into the global map. The version
-// is parsed from the caller's source filename and the package is derived from
-// the caller's function name, mirroring AddMigration.
+// is parsed from the caller's source filename and the package defaults to
+// DefaultPackageName, matching the default package of SQL migrations so a Go
+// data migration sits in the same namespace as the scripts it accompanies. Set
+// a different package with WithDataMigrationName(name, packageName) or use
+// AddNamedDataMigration.
 func AddDataMigration(m DataMigrator, opts ...DataMigrationOption) {
-	pc, filename, _, _ := runtime.Caller(1)
-
-	funcName := runtime.FuncForPC(pc).Name()
-	lastSlash := strings.LastIndexByte(funcName, '/')
-	if lastSlash < 0 {
-		lastSlash = 0
-	}
-
-	lastDot := strings.LastIndexByte(funcName[lastSlash:], '.') + lastSlash
-	packageName := funcName[:lastDot]
-	AddNamedDataMigration(packageName, filename, m, opts...)
+	_, filename, _, _ := runtime.Caller(1)
+	AddNamedDataMigration(DefaultPackageName, filename, m, opts...)
 }
 
 // AddNamedDataMigration registers a data migration with an explicit package and

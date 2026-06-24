@@ -363,3 +363,109 @@ func TestRunDataMigration_DependencyGate(t *testing.T) {
 	require.NoError(t, RunDataMigration(ctx, db, dm))
 	assert.Equal(t, 5, countMigrated(t, db))
 }
+
+func TestAfterOption_TargetPackage(t *testing.T) {
+	t.Run("defaults to the data migration's own package", func(t *testing.T) {
+		dm := &DataMigration{Package: "orders"}
+		After(1700000000000000)(dm)
+
+		assert.Equal(t, int64(1700000000000000), dm.After)
+		assert.Empty(t, dm.AfterPackage, "no explicit package configured")
+		assert.Equal(t, "orders", dm.afterPackage(), "falls back to the data migration package")
+	})
+
+	t.Run("explicit package targets a different package", func(t *testing.T) {
+		dm := &DataMigration{Package: "orders"}
+		After(1700000000000000, "core")(dm)
+
+		assert.Equal(t, "core", dm.AfterPackage)
+		assert.Equal(t, "core", dm.afterPackage())
+	})
+}
+
+func TestWithDataMigrationName_SetsPackage(t *testing.T) {
+	dm := &DataMigration{Package: "derived"}
+	WithDataMigrationName("backfill users", "main")(dm)
+	assert.Equal(t, "backfill users", dm.Name)
+	assert.Equal(t, "main", dm.Package, "package argument overrides the existing package")
+
+	keep := &DataMigration{Package: "keepme"}
+	WithDataMigrationName("name only")(keep)
+	assert.Equal(t, "name only", keep.Name)
+	assert.Equal(t, "keepme", keep.Package, "package is left untouched when omitted")
+}
+
+// TestRunDataMigration_DependencyGateDefaultPackage verifies that After(v)
+// without an explicit package resolves the schema version against the data
+// migration's own package, not a hard-coded default.
+func TestRunDataMigration_DependencyGateDefaultPackage(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 5)
+	require.NoError(t, db.Touch(ctx))
+
+	const schemaVersion = int64(1699999999999998)
+	dm := &DataMigration{
+		Package:  "orders",
+		Version:  1700000000000005,
+		Migrator: &backfillMigrator{table: "users", batchSize: 10},
+		After:    schemaVersion,
+	}
+
+	// schema version applied under "main" (the wrong package) must not satisfy
+	// a dependency that targets the "orders" package.
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	require.NoError(t, db.insertVersion(ctx, tx, DefaultPackageName, "", schemaVersion, true))
+	require.NoError(t, tx.Commit())
+
+	require.Error(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 0, countMigrated(t, db))
+
+	// applying it under "orders" satisfies the gate.
+	tx, err = db.Begin()
+	require.NoError(t, err)
+	require.NoError(t, db.insertVersion(ctx, tx, "orders", "", schemaVersion, true))
+	require.NoError(t, tx.Commit())
+
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 5, countMigrated(t, db))
+}
+
+// TestRunDataMigration_DependencyGateCrossPackage verifies that After(v, pkg)
+// resolves the schema version against the explicitly named package, which may
+// differ from the data migration's own package.
+func TestRunDataMigration_DependencyGateCrossPackage(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 5)
+	require.NoError(t, db.Touch(ctx))
+
+	const schemaVersion = int64(1699999999999997)
+	dm := &DataMigration{
+		Package:      DefaultPackageName,
+		Version:      1700000000000006,
+		Migrator:     &backfillMigrator{table: "users", batchSize: 10},
+		After:        schemaVersion,
+		AfterPackage: "core",
+	}
+
+	// applying the version under the data migration's own package ("main") is
+	// not enough; the dependency targets "core".
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	require.NoError(t, db.insertVersion(ctx, tx, DefaultPackageName, "", schemaVersion, true))
+	require.NoError(t, tx.Commit())
+
+	require.Error(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 0, countMigrated(t, db))
+
+	// applying it under "core" satisfies the gate.
+	tx, err = db.Begin()
+	require.NoError(t, err)
+	require.NoError(t, db.insertVersion(ctx, tx, "core", "", schemaVersion, true))
+	require.NoError(t, tx.Commit())
+
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 5, countMigrated(t, db))
+}
