@@ -20,6 +20,11 @@ import (
 // table (TableName) so the schema runner's done/not-done semantics stay intact.
 const DataMigrationTableName = "rockhopper_data_migrations"
 
+// dataMigratorComponent is the value of the "component" log field stamped on
+// every data-migration log line, so operators can filter the data-migrator's
+// output apart from the schema runner's.
+const dataMigratorComponent = "data_migrator"
+
 // Data migration status values stored in the status column.
 const (
 	// DataMigrationPending means the migration has a row but no batch has run yet.
@@ -36,6 +41,20 @@ const (
 // one. The lease is renewed on every batch commit, so the TTL only needs to
 // comfortably exceed a single batch's duration plus its throttle pause.
 const DefaultLeaseTTL = 30 * time.Second
+
+// DefaultBackoffLimit is the number of times a failed batch is retried before
+// the data migration gives up and is marked failed. It is used when a data
+// migration does not set BackoffLimit.
+const DefaultBackoffLimit = 3
+
+// DefaultBackoffDelay is the base pause before the first retry of a failed
+// batch. It doubles on each subsequent attempt, capped at maxBackoffDelay. It
+// is used when a data migration does not set BackoffDelay.
+const DefaultBackoffDelay = 1 * time.Second
+
+// maxBackoffDelay caps the exponential retry pause so a large BackoffLimit
+// cannot produce an unbounded (or overflowing) delay.
+const maxBackoffDelay = 5 * time.Minute
 
 var (
 	// ErrLeaseHeld is returned when another live process holds the lease for a
@@ -120,7 +139,12 @@ type DataMigrator interface {
 	// advanced checkpoint and whether the migration is complete. exec is bound
 	// to the transaction that persists the returned checkpoint, so Batch must
 	// not commit, roll back or sleep. Batches should be idempotent so that an
-	// interrupted batch can safely be retried on resume.
+	// interrupted batch can safely be retried on resume (the runner also retries
+	// a failed batch up to BackoffLimit times before giving up).
+	//
+	// cp is never empty unless Plan returned an empty checkpoint: a run that
+	// finds an empty stored checkpoint re-invokes Plan first, so json.Unmarshal
+	// on cp will not fail on an empty payload as long as Plan returns valid JSON.
 	Batch(ctx context.Context, exec BatchExecutor, cp Checkpoint) (next Checkpoint, done bool, err error)
 }
 
@@ -161,6 +185,48 @@ type DataMigration struct {
 	// may steal it. It is renewed on every batch commit. Zero means
 	// DefaultLeaseTTL. It must exceed a single batch's duration plus Throttle.
 	LeaseTTL time.Duration
+
+	// BackoffLimit is the number of times a failed batch is retried (with an
+	// exponential backoff pause) within a single run before the migration gives
+	// up and is marked failed. Zero means DefaultBackoffLimit; a negative value
+	// disables retries (the batch fails on its first error).
+	BackoffLimit int
+
+	// BackoffDelay is the base pause before the first retry; it doubles on each
+	// subsequent attempt, capped internally. Zero means DefaultBackoffDelay.
+	BackoffDelay time.Duration
+}
+
+// backoffLimit returns the configured retry count, applying DefaultBackoffLimit
+// for the zero value and clamping a negative value to zero (no retries).
+func (dm *DataMigration) backoffLimit() int {
+	if dm.BackoffLimit == 0 {
+		return DefaultBackoffLimit
+	}
+
+	if dm.BackoffLimit < 0 {
+		return 0
+	}
+
+	return dm.BackoffLimit
+}
+
+// backoffDelay returns the pause before the given 1-based retry attempt: the
+// base delay doubled (attempt-1) times, capped at maxBackoffDelay.
+func (dm *DataMigration) backoffDelay(attempt int) time.Duration {
+	d := dm.BackoffDelay
+	if d <= 0 {
+		d = DefaultBackoffDelay
+	}
+
+	for i := 1; i < attempt; i++ {
+		d *= 2
+		if d >= maxBackoffDelay {
+			return maxBackoffDelay
+		}
+	}
+
+	return d
 }
 
 // afterPackage returns the package that the After schema version is looked up
@@ -182,6 +248,23 @@ func (dm *DataMigration) leaseTTL() time.Duration {
 	}
 
 	return DefaultLeaseTTL
+}
+
+// logEntry returns a logrus entry pre-populated with the data-migrator
+// component tag and this migration's identity, so every phase/progress line
+// carries consistent, filterable structured fields.
+func (dm *DataMigration) logEntry() *log.Entry {
+	fields := log.Fields{
+		"component": dataMigratorComponent,
+		"package":   dm.Package,
+		"version":   dm.Version,
+	}
+
+	if dm.Name != "" {
+		fields["name"] = dm.Name
+	}
+
+	return log.WithFields(fields)
 }
 
 func (dm *DataMigration) String() string {
@@ -235,6 +318,22 @@ func WithDataMigrationName(name string, packageName ...string) DataMigrationOpti
 func WithLeaseTTL(d time.Duration) DataMigrationOption {
 	return func(dm *DataMigration) {
 		dm.LeaseTTL = d
+	}
+}
+
+// WithBackoffLimit sets how many times a failed batch is retried within a single
+// run before the migration gives up. A negative value disables retries.
+func WithBackoffLimit(n int) DataMigrationOption {
+	return func(dm *DataMigration) {
+		dm.BackoffLimit = n
+	}
+}
+
+// WithBackoffDelay sets the base pause before the first retry of a failed batch;
+// it doubles on each subsequent attempt, capped internally.
+func WithBackoffDelay(d time.Duration) DataMigrationOption {
+	return func(dm *DataMigration) {
+		dm.BackoffDelay = d
 	}
 }
 

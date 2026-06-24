@@ -364,6 +364,132 @@ func TestRunDataMigration_DependencyGate(t *testing.T) {
 	assert.Equal(t, 5, countMigrated(t, db))
 }
 
+// flakyMigrator fails its first failFirst Batch calls, then reports done. Its
+// checkpoint is non-empty so it does not depend on the empty-checkpoint replan.
+type flakyMigrator struct {
+	failFirst int
+
+	planCalls  int
+	batchCalls int
+}
+
+func (m *flakyMigrator) Plan(ctx context.Context, q Queryer) (Checkpoint, error) {
+	m.planCalls++
+	return Checkpoint(`{"started":true}`), nil
+}
+
+func (m *flakyMigrator) Batch(ctx context.Context, exec BatchExecutor, cp Checkpoint) (Checkpoint, bool, error) {
+	m.batchCalls++
+	if m.batchCalls <= m.failFirst {
+		return nil, false, fmt.Errorf("transient failure on batch %d", m.batchCalls)
+	}
+
+	return cp, true, nil
+}
+
+func TestBackoffLimit(t *testing.T) {
+	assert.Equal(t, DefaultBackoffLimit, (&DataMigration{}).backoffLimit(), "zero falls back to the default")
+	assert.Equal(t, 0, (&DataMigration{BackoffLimit: -1}).backoffLimit(), "negative disables retries")
+	assert.Equal(t, 5, (&DataMigration{BackoffLimit: 5}).backoffLimit())
+}
+
+func TestBackoffDelay(t *testing.T) {
+	dm := &DataMigration{BackoffDelay: 10 * time.Millisecond}
+	assert.Equal(t, 10*time.Millisecond, dm.backoffDelay(1))
+	assert.Equal(t, 20*time.Millisecond, dm.backoffDelay(2))
+	assert.Equal(t, 40*time.Millisecond, dm.backoffDelay(3))
+
+	// the zero value uses the default base.
+	assert.Equal(t, DefaultBackoffDelay, (&DataMigration{}).backoffDelay(1))
+
+	// growth is capped.
+	assert.Equal(t, maxBackoffDelay, (&DataMigration{BackoffDelay: time.Minute}).backoffDelay(20))
+}
+
+func TestRunDataMigration_BackoffRetrySucceeds(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	require.NoError(t, db.Touch(ctx))
+
+	mig := &flakyMigrator{failFirst: 2}
+	dm := &DataMigration{
+		Package:      DefaultPackageName,
+		Version:      1700000000000007,
+		Migrator:     mig,
+		BackoffLimit: 3,
+		BackoffDelay: time.Millisecond,
+	}
+
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 3, mig.batchCalls, "2 failed attempts then a successful one")
+
+	_, _, status := leaseState(t, db, dm)
+	assert.Equal(t, DataMigrationCompleted, status)
+}
+
+func TestRunDataMigration_BackoffLimitExhausted(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	require.NoError(t, db.Touch(ctx))
+
+	mig := &flakyMigrator{failFirst: 100} // never recovers
+	dm := &DataMigration{
+		Package:      DefaultPackageName,
+		Version:      1700000000000008,
+		Migrator:     mig,
+		BackoffLimit: 2,
+		BackoffDelay: time.Millisecond,
+	}
+
+	err := RunDataMigration(ctx, db, dm)
+	require.Error(t, err)
+	assert.Equal(t, 3, mig.batchCalls, "1 initial attempt + 2 retries")
+
+	_, _, status := leaseState(t, db, dm)
+	assert.Equal(t, DataMigrationFailed, status)
+}
+
+func TestRunDataMigration_BackoffDisabled(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	require.NoError(t, db.Touch(ctx))
+
+	mig := &flakyMigrator{failFirst: 100}
+	dm := &DataMigration{
+		Package:      DefaultPackageName,
+		Version:      1700000000000009,
+		Migrator:     mig,
+		BackoffLimit: -1, // no retries
+	}
+
+	require.Error(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 1, mig.batchCalls, "fails on the first error with no retry")
+}
+
+// TestRunDataMigration_ReplansOnEmptyCheckpoint verifies that a migration left
+// in a non-pending state with an empty checkpoint is re-planned, so the migrator
+// never receives an empty checkpoint it would fail to json.Unmarshal.
+func TestRunDataMigration_ReplansOnEmptyCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 5)
+	require.NoError(t, db.Touch(ctx))
+
+	mig := &backfillMigrator{table: "users", batchSize: 10}
+	dm := &DataMigration{
+		Package:  DefaultPackageName,
+		Version:  1700000000000010,
+		Migrator: mig,
+	}
+
+	// a prior attempt failed before persisting any checkpoint.
+	seedDataMigrationRow(t, db, dm, DataMigrationFailed, "", "", 0)
+
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 1, mig.planCalls, "Plan re-run because the stored checkpoint was empty")
+	assert.Equal(t, 5, countMigrated(t, db))
+}
+
 func TestAfterOption_TargetPackage(t *testing.T) {
 	t.Run("defaults to the data migration's own package", func(t *testing.T) {
 		dm := &DataMigration{Package: "orders"}
