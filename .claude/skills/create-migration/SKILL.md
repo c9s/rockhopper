@@ -3,7 +3,7 @@ name: create-migration
 description: Create new SQL migration files for multiple database dialects (sqlite3, mysql, postgres, tidb, redshift, clickhouse)
 disable-model-invocation: true
 allowed-tools: Bash
-argument-hint: [migration_name]
+argument-hint: "[migration_name]"
 ---
 
 Create new migration files named `$ARGUMENTS` for all configured database dialects.

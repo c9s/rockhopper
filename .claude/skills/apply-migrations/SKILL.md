@@ -2,7 +2,7 @@
 name: apply-migrations
 description: Apply pending database migrations (rockhopper up)
 disable-model-invocation: true
-argument-hint: [config_file]
+argument-hint: "[config_file]"
 ---
 
 Apply pending migrations using rockhopper.
