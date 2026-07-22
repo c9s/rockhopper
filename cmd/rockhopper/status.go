@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -84,7 +85,21 @@ func status(cmd *cobra.Command, args []string) error {
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{"Package", "Version ID", "Source File", "Applied At", "Current"})
 
-	for pkgName, migrations := range migrationMap {
+	var pkgNames []string
+	for pkgName := range migrationMap {
+		pkgNames = append(pkgNames, pkgName)
+	}
+	sort.Slice(pkgNames, func(i, j int) bool {
+		// make the "main" package always comes first
+		if pkgNames[i] == "main" {
+			return true
+		} else if pkgNames[j] == "main" {
+			return false
+		}
+		return pkgNames[i] < pkgNames[j]
+	})
+	for _, pkgName := range pkgNames {
+		migrations := migrationMap[pkgName]
 		currentVersion, err := db.CurrentVersion(ctx, pkgName)
 		if err != nil {
 			return err
