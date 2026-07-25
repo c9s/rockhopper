@@ -932,6 +932,32 @@ A run that finds an empty stored checkpoint (e.g. a prior attempt failed before
 receives an empty checkpoint unless `Plan` itself returns one — a JSON
 checkpoint can be `json.Unmarshal`ed without guarding against an empty payload.
 
+### Leases and crash recovery
+
+Exactly one process drives a migration at a time, enforced by a lease in the
+state table. The lease carries an expiry (`LeaseTTL`, default `30s`) that is
+renewed on every batch commit, so if the driving process crashes, its lease
+becomes acquirable `LeaseTTL` after its last committed batch.
+
+When another process holds the lease, a starting process retries acquisition for
+up to `LeaseWait` (default `2 × LeaseTTL`) before giving up with `ErrLeaseHeld`.
+That window is deliberately longer than the TTL: a **crashed** holder's lease
+expires within it and the new process takes over the work, while a **live**
+holder keeps renewing and is never reclaimed — so the new process waits out the
+window and correctly skips. Without this wait a process that starts within the
+TTL of a crash would see the stale lease, log *"driven by another process,
+skipping"*, and stall.
+
+```go
+rockhopper.WithLeaseTTL(2*time.Minute),  // raise if a single batch can take longer than the default 30s
+rockhopper.WithLeaseWait(5*time.Minute), // how long to wait out a held/stale lease (default 2×TTL)
+// rockhopper.WithLeaseWait(-1)          // disable waiting — report ErrLeaseHeld immediately
+```
+
+Set `LeaseTTL` comfortably above one batch's duration plus its `Throttle`;
+otherwise a live process's lease can expire mid-batch and be stolen (surfaced as
+`ErrLeaseLost`, with the in-flight batch rolled back).
+
 Every data-migration log line carries the structured field
 `component=data_migrator` along with `package` and `version`, so you can filter
 the data migrator's phase/progress output apart from the schema runner's. Phase

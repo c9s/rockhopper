@@ -130,6 +130,60 @@ func (db *DB) acquireDataMigrationLease(ctx context.Context, dm *DataMigration, 
 	return affected == 1, nil
 }
 
+// acquireDataMigrationLeaseWaiting claims the lease, retrying for up to
+// dm.leaseWait() when another process holds it. A crashed predecessor leaves a
+// lease that becomes acquirable once it expires (LeaseTTL after its last batch),
+// so waiting longer than the TTL lets a fresh process take over a dead holder's
+// work while still correctly yielding to a live holder, which keeps renewing and
+// is never reclaimed within the window. It returns false (no error) if the lease
+// is still held when the wait elapses.
+func (db *DB) acquireDataMigrationLeaseWaiting(ctx context.Context, dm *DataMigration, owner string, ttl time.Duration, logger *log.Entry) (bool, error) {
+	acquired, err := db.acquireDataMigrationLease(ctx, dm, owner, ttl)
+	if err != nil || acquired {
+		return acquired, err
+	}
+
+	wait := dm.leaseWait()
+	if wait <= 0 {
+		return false, nil
+	}
+
+	interval := dm.leasePollInterval()
+	start := time.Now()
+	deadline := start.Add(wait)
+	logger.WithFields(log.Fields{"wait": wait, "poll_interval": interval}).
+		Info("data migration lease held by another process, waiting for it to be released or to expire")
+
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return false, nil
+		}
+
+		sleep := interval
+		if sleep > remaining {
+			sleep = remaining
+		}
+
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(sleep):
+		}
+
+		acquired, err := db.acquireDataMigrationLease(ctx, dm, owner, ttl)
+		if err != nil {
+			return false, err
+		}
+
+		if acquired {
+			logger.WithField("waited", time.Since(start)).
+				Info("data migration lease acquired after waiting (took over a stale lease)")
+			return true, nil
+		}
+	}
+}
+
 // releaseDataMigrationLease sets a terminal status and clears the lease, guarded
 // by ownership (a process that no longer holds the lease is a no-op).
 func (db *DB) releaseDataMigrationLease(ctx context.Context, dm *DataMigration, owner, status string) error {
@@ -147,6 +201,47 @@ func (db *DB) releaseDataMigrationLease(ctx context.Context, dm *DataMigration, 
 
 	if _, err := db.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to release data migration lease")
+	}
+
+	return nil
+}
+
+// persistPlanCheckpoint stores the checkpoint produced by Plan before any batch
+// runs, moving the migration into the running state and renewing the lease. This
+// lets a first-batch failure resume from the planned checkpoint instead of
+// re-running Plan. It is guarded by ownership: a stolen lease matches no row and
+// returns ErrLeaseLost so the caller stops touching another owner's migration.
+func (db *DB) persistPlanCheckpoint(ctx context.Context, dm *DataMigration, owner string, ttl time.Duration, cp Checkpoint) error {
+	lb, err := db.leaseBuilder()
+	if err != nil {
+		return err
+	}
+
+	expiresAt := time.Now().Add(ttl).Unix()
+	q, args := lb.CommitLease(DataMigrationTableName,
+		[]dialect.Col{
+			{Name: "status", Val: DataMigrationRunning},
+			{Name: "checkpoint", Val: string(cp)},
+			{Name: "lease_expires_at", Val: expiresAt},
+		},
+		[]dialect.Col{
+			{Name: "package", Val: dm.Package},
+			{Name: "version_id", Val: dm.Version},
+		},
+		owner)
+
+	res, err := db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to persist planned checkpoint")
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to read affected rows for planned checkpoint")
+	}
+
+	if affected == 0 {
+		return ErrLeaseLost
 	}
 
 	return nil
@@ -250,7 +345,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 	owner := leaseOwner()
 	ttl := dm.leaseTTL()
 
-	acquired, err := db.acquireDataMigrationLease(ctx, dm, owner, ttl)
+	acquired, err := db.acquireDataMigrationLeaseWaiting(ctx, dm, owner, ttl, logger)
 	if err != nil {
 		return err
 	}
@@ -288,6 +383,25 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 			}
 
 			return fmt.Errorf("data migration %s: plan failed: %w", dm, err)
+		}
+
+		// persist the planned checkpoint before running any batch so a
+		// first-batch failure resumes from it instead of re-running Plan. An
+		// empty plan is left unpersisted: there is nothing to preserve and
+		// resume re-plans via the len(cp) == 0 branch anyway.
+		if len(cp) > 0 {
+			if err := db.persistPlanCheckpoint(ctx, dm, owner, ttl, cp); err != nil {
+				if errors.Is(err, ErrLeaseLost) {
+					logger.Warn("data migration lease lost while persisting planned checkpoint")
+					return err
+				}
+
+				if rerr := db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationFailed); rerr != nil {
+					logger.WithError(rerr).Warn("failed to release lease after persisting planned checkpoint failed")
+				}
+
+				return fmt.Errorf("data migration %s: persist planned checkpoint failed: %w", dm, err)
+			}
 		}
 
 		logger.WithField("checkpoint_bytes", len(cp)).Debug("data migration planned")
