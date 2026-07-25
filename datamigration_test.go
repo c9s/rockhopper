@@ -152,6 +152,42 @@ func TestRunDataMigration_Backfill(t *testing.T) {
 	assert.Equal(t, DataMigrationCompleted, status)
 }
 
+func TestRunDataMigration_KeepsPlanCheckpointOnFirstBatchFailure(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	require.NoError(t, db.Touch(ctx))
+
+	// never recovers within the backoff budget, so the migration fails before
+	// any batch commits. The planned checkpoint must still be persisted.
+	mig := &flakyMigrator{failFirst: 100}
+	dm := &DataMigration{
+		Package:      DefaultPackageName,
+		Version:      1700000000000030,
+		Migrator:     mig,
+		BackoffLimit: 2,
+		BackoffDelay: time.Millisecond,
+	}
+
+	err := RunDataMigration(ctx, db, dm)
+	require.Error(t, err)
+
+	status, cp, found, err := db.loadDataMigrationState(ctx, dm.Package, dm.Version)
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, DataMigrationFailed, status)
+	// the planned checkpoint is preserved even though no batch committed.
+	assert.Equal(t, `{"started":true}`, string(cp))
+
+	// resume: stop failing. Plan must not be called again because the stored
+	// checkpoint is non-empty.
+	mig.failFirst = 0
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 1, mig.planCalls)
+
+	_, _, status = leaseState(t, db, dm)
+	assert.Equal(t, DataMigrationCompleted, status)
+}
+
 func TestRunDataMigration_SkipsWhenCompleted(t *testing.T) {
 	ctx := context.Background()
 	db := openDataMigrationTestDB(t)
