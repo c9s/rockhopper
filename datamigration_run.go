@@ -416,6 +416,21 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 	attempts := 0
 	batches := 0
 	startedAt := time.Now()
+
+	// Optional progress reporting: the migrator is the sole interpreter of the
+	// checkpoint, so it is where progress is decoded. completedAtStart anchors
+	// the ETA to this run's rate (see etaFrom); on a Progress error it stays 0,
+	// degrading the estimate rather than disabling reporting.
+	reporter, reportsProgress := dm.Migrator.(ProgressReporter)
+	var completedAtStart int64
+	if reportsProgress {
+		if p, err := reporter.Progress(cp); err != nil {
+			logger.WithError(err).Debug("failed to compute initial data migration progress")
+		} else {
+			completedAtStart = p.Completed
+		}
+	}
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -459,6 +474,10 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 
 		logger.WithFields(log.Fields{"batch": batches, "checkpoint_bytes": len(cp), "done": done}).
 			Debug("data migration batch committed")
+
+		if reportsProgress {
+			dm.reportProgress(reporter, logger, cp, batches, startedAt, completedAtStart, done)
+		}
 
 		if done {
 			logger.WithFields(log.Fields{"batches": batches, "elapsed": time.Since(startedAt)}).
@@ -534,6 +553,66 @@ func (db *DB) runDataBatch(ctx context.Context, dm *DataMigration, owner string,
 	}
 
 	return next, done, nil
+}
+
+// etaFrom estimates the time remaining from the rate observed in this run:
+// (Total-Completed)/rate, where rate is the work completed in this run divided
+// by the elapsed time. Anchoring on completedAtStart (progress when this run
+// began) keeps the estimate correct across resumes, where Completed reflects
+// prior runs but elapsed does not. It returns 0 whenever a rate cannot be
+// established: unknown Total, no progress yet in this run, or already complete.
+func etaFrom(p Progress, completedAtStart int64, elapsed time.Duration) time.Duration {
+	if p.Total <= 0 || elapsed <= 0 {
+		return 0
+	}
+
+	doneThisRun := p.Completed - completedAtStart
+	remaining := p.Total - p.Completed
+	if doneThisRun <= 0 || remaining <= 0 {
+		return 0
+	}
+
+	rate := float64(doneThisRun) / elapsed.Seconds() // work units per second
+	if rate <= 0 {
+		return 0
+	}
+
+	return time.Duration(float64(remaining) / rate * float64(time.Second))
+}
+
+// reportProgress emits a progress log line and, when configured, invokes the
+// progress callback for the current checkpoint. A Progress() error is logged at
+// debug and swallowed so progress reporting never fails the migration.
+func (dm *DataMigration) reportProgress(reporter ProgressReporter, logger *log.Entry, cp Checkpoint, batches int, startedAt time.Time, completedAtStart int64, done bool) {
+	p, err := reporter.Progress(cp)
+	if err != nil {
+		logger.WithError(err).Debug("failed to compute data migration progress")
+		return
+	}
+
+	elapsed := time.Since(startedAt)
+	eta := etaFrom(p, completedAtStart, elapsed)
+
+	fields := log.Fields{"completed": p.Completed, "batch": batches, "elapsed": elapsed}
+	if p.Total > 0 {
+		fields["total"] = p.Total
+		fields["percent"] = p.Percent()
+		if eta > 0 {
+			fields["eta"] = eta
+		}
+	}
+
+	logger.WithFields(fields).Info("data migration progress")
+
+	if dm.ProgressCallback != nil {
+		dm.ProgressCallback(ProgressReport{
+			Progress: p,
+			Batches:  batches,
+			Elapsed:  elapsed,
+			ETA:      eta,
+			Done:     done,
+		})
+	}
 }
 
 // RunDataMigrations runs the given data migrations in version order.
