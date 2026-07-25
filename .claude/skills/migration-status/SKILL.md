@@ -2,7 +2,7 @@
 name: migration-status
 description: Show the current migration status for all configured databases
 disable-model-invocation: true
-argument-hint: [config_file]
+argument-hint: "[config_file]"
 ---
 
 Show migration status using rockhopper.

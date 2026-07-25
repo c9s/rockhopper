@@ -2,7 +2,7 @@
 name: compile-migrations
 description: Compile SQL migration files into Go source code for embedding in binaries
 disable-model-invocation: true
-argument-hint: [output_dir]
+argument-hint: "[output_dir]"
 ---
 
 Compile SQL migrations into Go code for all configured dialects.

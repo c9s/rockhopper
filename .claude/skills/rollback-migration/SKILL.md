@@ -2,7 +2,7 @@
 name: rollback-migration
 description: Rollback the last applied database migration (rockhopper down)
 disable-model-invocation: true
-argument-hint: [config_file]
+argument-hint: "[config_file]"
 ---
 
 Rollback the last applied migration using rockhopper.
