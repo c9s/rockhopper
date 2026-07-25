@@ -206,6 +206,47 @@ func (db *DB) releaseDataMigrationLease(ctx context.Context, dm *DataMigration, 
 	return nil
 }
 
+// persistPlanCheckpoint stores the checkpoint produced by Plan before any batch
+// runs, moving the migration into the running state and renewing the lease. This
+// lets a first-batch failure resume from the planned checkpoint instead of
+// re-running Plan. It is guarded by ownership: a stolen lease matches no row and
+// returns ErrLeaseLost so the caller stops touching another owner's migration.
+func (db *DB) persistPlanCheckpoint(ctx context.Context, dm *DataMigration, owner string, ttl time.Duration, cp Checkpoint) error {
+	lb, err := db.leaseBuilder()
+	if err != nil {
+		return err
+	}
+
+	expiresAt := time.Now().Add(ttl).Unix()
+	q, args := lb.CommitLease(DataMigrationTableName,
+		[]dialect.Col{
+			{Name: "status", Val: DataMigrationRunning},
+			{Name: "checkpoint", Val: string(cp)},
+			{Name: "lease_expires_at", Val: expiresAt},
+		},
+		[]dialect.Col{
+			{Name: "package", Val: dm.Package},
+			{Name: "version_id", Val: dm.Version},
+		},
+		owner)
+
+	res, err := db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to persist planned checkpoint")
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to read affected rows for planned checkpoint")
+	}
+
+	if affected == 0 {
+		return ErrLeaseLost
+	}
+
+	return nil
+}
+
 // isSchemaVersionApplied reports whether the given schema version of a package
 // has been applied in the version table.
 func (db *DB) isSchemaVersionApplied(ctx context.Context, pkgName string, version int64) (bool, error) {
@@ -342,6 +383,25 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 			}
 
 			return fmt.Errorf("data migration %s: plan failed: %w", dm, err)
+		}
+
+		// persist the planned checkpoint before running any batch so a
+		// first-batch failure resumes from it instead of re-running Plan. An
+		// empty plan is left unpersisted: there is nothing to preserve and
+		// resume re-plans via the len(cp) == 0 branch anyway.
+		if len(cp) > 0 {
+			if err := db.persistPlanCheckpoint(ctx, dm, owner, ttl, cp); err != nil {
+				if errors.Is(err, ErrLeaseLost) {
+					logger.Warn("data migration lease lost while persisting planned checkpoint")
+					return err
+				}
+
+				if rerr := db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationFailed); rerr != nil {
+					logger.WithError(rerr).Warn("failed to release lease after persisting planned checkpoint failed")
+				}
+
+				return fmt.Errorf("data migration %s: persist planned checkpoint failed: %w", dm, err)
+			}
 		}
 
 		logger.WithField("checkpoint_bytes", len(cp)).Debug("data migration planned")
