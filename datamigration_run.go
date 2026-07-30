@@ -376,7 +376,9 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		// empty checkpoint unless the migrator's own Plan returns one — sparing
 		// callers from json.Unmarshal failing on an empty payload.
 		logger.Info("planning data migration")
+		planStart := time.Now()
 		cp, err = dm.Migrator.Plan(ctx, db.DB)
+		observePlanDuration(dm, time.Since(planStart))
 		if err != nil {
 			if rerr := db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationFailed); rerr != nil {
 				logger.WithError(rerr).Warn("failed to release lease after plan error")
@@ -471,6 +473,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		attempts = 0
 		batches++
 		cp = next
+		recordBatchCommitted(dm, time.Now())
 
 		logger.WithFields(log.Fields{"batch": batches, "checkpoint_bytes": len(cp), "done": done}).
 			Debug("data migration batch committed")
@@ -480,6 +483,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		}
 
 		if done {
+			recordCompleted(dm)
 			logger.WithFields(log.Fields{"batches": batches, "elapsed": time.Since(startedAt)}).
 				Info("data migration completed")
 			return db.releaseDataMigrationLease(ctx, dm, owner, DataMigrationCompleted)
@@ -509,7 +513,9 @@ func (db *DB) runDataBatch(ctx context.Context, dm *DataMigration, owner string,
 		return nil, false, err
 	}
 
+	batchStart := time.Now()
 	next, done, err = dm.Migrator.Batch(ctx, tx, cp)
+	observeBatchDuration(dm, time.Since(batchStart))
 	if err != nil {
 		return nil, false, rollbackAndLogErr(err, tx, "data migration batch failed")
 	}
@@ -592,6 +598,8 @@ func (dm *DataMigration) reportProgress(reporter ProgressReporter, logger *log.E
 
 	elapsed := time.Since(startedAt)
 	eta := etaFrom(p, completedAtStart, elapsed)
+
+	recordProgressMetrics(dm, p, eta)
 
 	fields := log.Fields{"completed": p.Completed, "batch": batches, "elapsed": elapsed}
 	if p.Total > 0 {
