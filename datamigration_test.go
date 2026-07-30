@@ -735,3 +735,95 @@ func TestRunDataMigration_DependencyGateCrossPackage(t *testing.T) {
 	require.NoError(t, RunDataMigration(ctx, db, dm))
 	assert.Equal(t, 5, countMigrated(t, db))
 }
+
+// progressMigrator is a backfill that also reports progress by decoding its
+// pkCursor checkpoint: Completed is the advanced cursor, Total the max id.
+type progressMigrator struct {
+	backfillMigrator
+}
+
+func (p *progressMigrator) Progress(cp Checkpoint) (Progress, error) {
+	var c pkCursor
+	if err := json.Unmarshal(cp, &c); err != nil {
+		return Progress{}, err
+	}
+
+	return Progress{Completed: c.Last, Total: c.Max}, nil
+}
+
+func TestProgressPercent(t *testing.T) {
+	assert.Equal(t, 0.0, Progress{Completed: 5, Total: 0}.Percent(), "unknown total")
+	assert.Equal(t, 50.0, Progress{Completed: 5, Total: 10}.Percent())
+	assert.Equal(t, 100.0, Progress{Completed: 30, Total: 25}.Percent(), "clamped to 100")
+	assert.Equal(t, 0.0, Progress{Completed: -1, Total: 10}.Percent(), "clamped to 0")
+}
+
+// TestEtaFrom pins the ETA math, including the resume case: anchoring on the
+// progress at run start makes the estimate track this run's rate rather than
+// the cumulative rate across resumes.
+func TestEtaFrom(t *testing.T) {
+	assert.Zero(t, etaFrom(Progress{Completed: 5, Total: 0}, 0, time.Second), "unknown total")
+	assert.Zero(t, etaFrom(Progress{Completed: 50, Total: 100}, 50, time.Second), "no progress yet this run")
+	assert.Zero(t, etaFrom(Progress{Completed: 100, Total: 100}, 0, time.Second), "already complete")
+
+	// fresh run: 25/100 done in 1s -> 25 units/s -> 75 remaining -> 3s.
+	assert.Equal(t, 3*time.Second, etaFrom(Progress{Completed: 25, Total: 100}, 0, time.Second))
+
+	// resume: began at 50, now 75 after 1s -> 25 done this run -> 25 units/s ->
+	// 25 remaining -> 1s. A cumulative calc (75 units/s) would wrongly say ~0.33s.
+	assert.Equal(t, 1*time.Second, etaFrom(Progress{Completed: 75, Total: 100}, 50, time.Second))
+}
+
+// TestRunDataMigration_ReportsProgress verifies the progress callback fires once
+// per committed batch with monotonically increasing progress, ending at 100%
+// with Done set.
+func TestRunDataMigration_ReportsProgress(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 25)
+
+	var reports []ProgressReport
+	mig := &progressMigrator{backfillMigrator{table: "users", batchSize: 10}}
+	dm := &DataMigration{
+		Package:  DefaultPackageName,
+		Version:  1700000000000020,
+		Migrator: mig,
+	}
+	WithProgressCallback(func(r ProgressReport) { reports = append(reports, r) })(dm)
+
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+
+	require.Len(t, reports, 3, "one report per committed batch (10 + 10 + 5)")
+	for i, r := range reports {
+		assert.EqualValues(t, i+1, r.Batches)
+		if i > 0 {
+			assert.Greater(t, r.Percent(), reports[i-1].Percent(), "progress increases")
+		}
+	}
+
+	last := reports[len(reports)-1]
+	assert.True(t, last.Done, "final report marks completion")
+	assert.Equal(t, 100.0, last.Percent(), "final report is 100%")
+}
+
+// TestRunDataMigration_NoProgressReporter verifies that a migrator which does
+// not implement ProgressReporter never invokes a configured callback, keeping
+// the feature fully opt-in.
+func TestRunDataMigration_NoProgressReporter(t *testing.T) {
+	ctx := context.Background()
+	db := openDataMigrationTestDB(t)
+	seedUsers(t, db, 15)
+
+	called := 0
+	mig := &backfillMigrator{table: "users", batchSize: 10} // no Progress method
+	dm := &DataMigration{
+		Package:  DefaultPackageName,
+		Version:  1700000000000021,
+		Migrator: mig,
+	}
+	WithProgressCallback(func(ProgressReport) { called++ })(dm)
+
+	require.NoError(t, RunDataMigration(ctx, db, dm))
+	assert.Equal(t, 15, countMigrated(t, db))
+	assert.Equal(t, 0, called, "callback is never invoked without a ProgressReporter")
+}

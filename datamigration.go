@@ -107,6 +107,72 @@ func leaseOwner() string {
 // migrator's own code interprets its contents (commonly JSON).
 type Checkpoint []byte
 
+// Progress describes how far a data migration has advanced. The counts are
+// unit-agnostic: a migrator reports whatever it measures work in (rows, primary
+// keys, batches, bytes...). Total is 0 when the size is unknown, in which case
+// Percent and the framework-computed ETA are suppressed.
+type Progress struct {
+	// Completed is the amount of work done so far.
+	Completed int64
+
+	// Total is the total amount of work, or 0 when unknown.
+	Total int64
+}
+
+// Percent returns Completed/Total*100, clamped to [0, 100], or 0 when Total is
+// unknown (0).
+func (p Progress) Percent() float64 {
+	if p.Total <= 0 {
+		return 0
+	}
+
+	pct := float64(p.Completed) / float64(p.Total) * 100
+	if pct < 0 {
+		return 0
+	}
+
+	if pct > 100 {
+		return 100
+	}
+
+	return pct
+}
+
+// ProgressReporter is optionally implemented by a DataMigrator to expose
+// human-facing progress derived from the current checkpoint. The runner
+// type-asserts for it after each committed batch; a migrator that does not
+// implement it simply produces no progress output, so it is fully backward
+// compatible. Because the migrator is the sole interpreter of the opaque
+// checkpoint bytes, it is the natural place to decode them into a Progress.
+type ProgressReporter interface {
+	// Progress decodes cp and reports how far the migration has advanced. A
+	// non-nil error skips progress reporting for that batch (it never fails the
+	// migration), so implementations may return an error rather than guess.
+	Progress(cp Checkpoint) (Progress, error)
+}
+
+// ProgressReport is handed to a progress callback after each committed batch
+// (and once at completion). It pairs the migrator-supplied Progress with timing
+// the framework computes.
+type ProgressReport struct {
+	Progress
+
+	// Batches is the number of batches committed in this run so far.
+	Batches int
+
+	// Elapsed is the wall-clock time since this run began (not including time
+	// spent by previous, resumed runs).
+	Elapsed time.Duration
+
+	// ETA is the estimated time remaining, computed from the rate observed in
+	// this run. It is 0 when it cannot be computed (unknown Total, or not enough
+	// progress in this run to establish a rate).
+	ETA time.Duration
+
+	// Done is true on the final report, emitted when the migration completes.
+	Done bool
+}
+
 // Queryer is the read side of a database handle. Data migrations need to read
 // rows to compute batch ranges and detect completion, which the core
 // SQLExecutor (ExecContext only) does not expose. Both *sql.DB and *sql.Tx
@@ -204,6 +270,12 @@ type DataMigration struct {
 	// BackoffDelay is the base pause before the first retry; it doubles on each
 	// subsequent attempt, capped internally. Zero means DefaultBackoffDelay.
 	BackoffDelay time.Duration
+
+	// ProgressCallback, when set and the Migrator implements ProgressReporter,
+	// is invoked with a ProgressReport after each committed batch and once at
+	// completion. It runs on the migration goroutine, so it must not block. Nil
+	// disables the callback (progress is still logged).
+	ProgressCallback func(ProgressReport)
 }
 
 // backoffLimit returns the configured retry count, applying DefaultBackoffLimit
@@ -383,6 +455,17 @@ func WithBackoffLimit(n int) DataMigrationOption {
 func WithBackoffDelay(d time.Duration) DataMigrationOption {
 	return func(dm *DataMigration) {
 		dm.BackoffDelay = d
+	}
+}
+
+// WithProgressCallback registers a sink invoked with a ProgressReport after
+// each committed batch (and once at completion), provided the migrator
+// implements ProgressReporter. The callback runs on the migration goroutine and
+// must not block. A Progress() error skips the callback for that batch and is
+// logged at debug level; it never fails the migration.
+func WithProgressCallback(fn func(ProgressReport)) DataMigrationOption {
+	return func(dm *DataMigration) {
+		dm.ProgressCallback = fn
 	}
 }
 
