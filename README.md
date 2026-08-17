@@ -966,6 +966,67 @@ log at `info`/`warn`; per-batch progress (`batch`, `checkpoint_bytes`, `done`)
 logs at `debug` — raise the logrus level to `debug` to follow batch-by-batch
 progress on a long backfill.
 
+### Progress and metrics
+
+A migrator can optionally report how far it has advanced by implementing
+`ProgressReporter` — the framework already hands it the checkpoint, which it is
+the only code that understands:
+
+```go
+func (b *backfillUsers) Progress(cp rockhopper.Checkpoint) (rockhopper.Progress, error) {
+    var c cursor
+    if err := json.Unmarshal(cp, &c); err != nil {
+        return rockhopper.Progress{}, err
+    }
+
+    // counts are unit-agnostic — rows, keys, batches, whatever you measure in.
+    return rockhopper.Progress{Completed: c.Done, Total: c.Total}, nil
+}
+```
+
+When implemented, the runner logs a `percent`/`eta` line after each committed
+batch and computes the ETA from the rate observed in the current run (so it
+stays correct across a resume). Pass `WithProgressCallback` to also receive each
+`ProgressReport` in your own code — e.g. to render a live progress bar:
+
+```go
+rockhopper.WithProgressCallback(func(r rockhopper.ProgressReport) {
+    log.Printf("%.1f%% (%d/%d), eta %s", r.Percent(), r.Completed, r.Total, r.ETA)
+}),
+```
+
+The same signals are exported as Prometheus metrics. The collectors are **not**
+registered on import (a library must not touch a global registry); call
+`RegisterDataMigrationMetrics` once at startup to expose them, then the runner
+records values as migrations run:
+
+```go
+import "github.com/prometheus/client_golang/prometheus"
+
+if err := rockhopper.RegisterDataMigrationMetrics(prometheus.DefaultRegisterer); err != nil {
+    log.Fatal(err)
+}
+```
+
+All metric names are prefixed `rockhopper_`, and every duration is reported in
+**milliseconds** (never seconds):
+
+| Metric | Type | Labels | Description |
+| --- | --- | --- | --- |
+| `rockhopper_data_migration_applied_version` | Gauge | `package` | Version id of the most recently completed data migration in the package. |
+| `rockhopper_data_migration_updated_timestamp_milliseconds` | Gauge | `package`, `version` | Unix time (ms) of the last committed batch — tracks liveness of a running migration. |
+| `rockhopper_data_migration_plan_duration_milliseconds` | Histogram | `package`, `version` | Wall-clock duration of the `Plan` call. |
+| `rockhopper_data_migration_batch_duration_milliseconds` | Histogram | `package`, `version` | Wall-clock duration of each `Batch` call. |
+| `rockhopper_data_migration_progress_completed` | Gauge | `package`, `version` | Migrator-reported units of work completed. |
+| `rockhopper_data_migration_progress_total` | Gauge | `package`, `version` | Migrator-reported total units of work. |
+| `rockhopper_data_migration_progress_percent` | Gauge | `package`, `version` | Completion percentage (0–100). |
+| `rockhopper_data_migration_eta_milliseconds` | Gauge | `package`, `version` | Estimated time remaining, from the current run's rate. |
+
+The progress and ETA metrics are populated only for migrators that implement
+`ProgressReporter`; the version, timestamp and duration metrics are recorded for
+every data migration. `RegisterDataMigrationMetrics` tolerates being called more
+than once (a repeated registration is treated as success).
+
 ## Environment Variables
 
 You can override config file values with environment variables:
