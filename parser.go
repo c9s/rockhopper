@@ -247,7 +247,7 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 	}
 
 	if bufferRemaining := strings.TrimSpace(buf.String()); len(bufferRemaining) > 0 {
-		return nil, errors.Errorf("failed to parse migration: state %q, unexpected unfinished SQL query: %q: missing semicolon?", state, bufferRemaining)
+		return nil, fmt.Errorf("failed to parse migration: state %v, unexpected unfinished SQL query: %q: missing semicolon?", state, bufferRemaining)
 	}
 
 	return chunk, nil
