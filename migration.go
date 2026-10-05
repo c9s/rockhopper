@@ -310,7 +310,7 @@ func (ms MigrationSlice) Sort() MigrationSlice {
 func (ms MigrationSlice) Connect() MigrationSlice {
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
-	for i := 0; i < len(ms); i++ {
+	for i := range ms {
 		m := ms[i]
 
 		if i < len(ms)-1 {

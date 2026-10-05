@@ -78,7 +78,7 @@ func FileNumericComponent(name string) (int64, error) {
 	return n, nil
 }
 
-type MigrationLoader interface{}
+type MigrationLoader any
 
 type GoMigrationLoader struct{}
 

@@ -92,7 +92,7 @@ func openDataMigrationTestDB(t *testing.T) *DB {
 
 func seedUsers(t *testing.T, db *DB, n int) {
 	t.Helper()
-	for i := 0; i < n; i++ {
+	for range n {
 		_, err := db.Exec(`INSERT INTO users (migrated) VALUES (0)`)
 		require.NoError(t, err)
 	}

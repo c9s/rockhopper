@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
@@ -26,7 +27,7 @@ const legacyGooseTableName = "goose_db_version"
 const TableName = "rockhopper_versions"
 
 type SQLExecutor interface {
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 type DB struct {
@@ -422,12 +423,7 @@ func versionSchema(tableName string) dialect.Schema {
 }
 
 func sliceContains(a []string, b string) bool {
-	for _, s := range a {
-		if s == b {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(a, b)
 }
 
 func rollbackAndLogErr(originErr error, txn *sql.Tx, msg string, args ...any) error {
@@ -445,7 +441,7 @@ func rollbackAndLogErr(originErr error, txn *sql.Tx, msg string, args ...any) er
 	return originErr
 }
 
-func execAndCheckErr(db SqlExecutor, ctx context.Context, sql string, args ...interface{}) error {
+func execAndCheckErr(db SqlExecutor, ctx context.Context, sql string, args ...any) error {
 	_, err := db.ExecContext(ctx, sql, args...)
 	if err != nil {
 		log.WithError(err).Errorf("unable to execute SQL: %s", sql)
@@ -466,8 +462,7 @@ func convertNoRowsErrToNil(err error) error {
 func (db *DB) FindLastAppliedMigration(
 	ctx context.Context, allMigrations MigrationSlice,
 ) (int, *Migration, error) {
-	for i := len(allMigrations) - 1; i >= 0; i-- {
-		m := allMigrations[i]
+	for i, m := range slices.Backward(allMigrations) {
 
 		m, err := db.LoadMigration(ctx, m)
 		if err != nil {
