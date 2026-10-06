@@ -22,10 +22,7 @@ func AddMigration(up, down TransactionHandler) {
 	pc, filename, _, _ := runtime.Caller(1)
 
 	funcName := runtime.FuncForPC(pc).Name()
-	lastSlash := strings.LastIndexByte(funcName, '/')
-	if lastSlash < 0 {
-		lastSlash = 0
-	}
+	lastSlash := max(strings.LastIndexByte(funcName, '/'), 0)
 
 	lastDot := strings.LastIndexByte(funcName[lastSlash:], '.') + lastSlash
 	packageName := funcName[:lastDot]

@@ -160,10 +160,7 @@ func (db *DB) acquireDataMigrationLeaseWaiting(ctx context.Context, dm *DataMigr
 			return false, nil
 		}
 
-		sleep := interval
-		if sleep > remaining {
-			sleep = remaining
-		}
+		sleep := min(interval, remaining)
 
 		select {
 		case <-ctx.Done():

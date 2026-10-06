@@ -10,6 +10,7 @@ package dockermanage
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/ory/dockertest/v3"
@@ -90,9 +91,7 @@ func (m *Manager) Start(opts StartOptions) (*Container, error) {
 	}
 
 	labels := map[string]string{ManagedLabelKey: opts.Repository}
-	for k, v := range opts.Labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, opts.Labels)
 
 	resource, err := m.pool.RunWithOptions(&dockertest.RunOptions{
 		Name:       opts.Name,

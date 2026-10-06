@@ -193,7 +193,7 @@ type apiTemplateArgs struct {
 	PackageName string
 }
 
-func renderTemplateAndGoFormatToFile(fp string, tpl *template.Template, a interface{}) error {
+func renderTemplateAndGoFormatToFile(fp string, tpl *template.Template, a any) error {
 	out, err := renderTemplateAndGoFormat(tpl, a)
 	if err != nil {
 		return err
@@ -202,7 +202,7 @@ func renderTemplateAndGoFormatToFile(fp string, tpl *template.Template, a interf
 	return os.WriteFile(fp, out, 0600)
 }
 
-func renderTemplateAndGoFormat(tpl *template.Template, a interface{}) ([]byte, error) {
+func renderTemplateAndGoFormat(tpl *template.Template, a any) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	err := tpl.Execute(buf, a)
 	if err != nil {

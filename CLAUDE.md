@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rockhopper is an embeddable Go database migration tool (forked from Goose). It supports SQL and Go-based migrations with package-based organization, multi-database support (MySQL, PostgreSQL, SQLite3, MSSQL, TiDB, Redshift), and the ability to compile/embed SQL migrations into Go binaries.
 
-Module path: `github.com/c9s/rockhopper/v2` (Go 1.21+)
+Module path: `github.com/c9s/rockhopper/v2` (Go 1.27.1+)
 
 ## Common Commands
 

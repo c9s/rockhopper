@@ -30,7 +30,7 @@ const scanBufSize = 4 * 1024 * 1024
 var matchEmptyLines = regexp.MustCompile(`^\s*$`)
 
 var bufPool = &sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		b := make([]byte, scanBufSize)
 		return &b
 	},
@@ -100,8 +100,8 @@ func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 		line := scanner.Text()
 
 		var isEnd = false
-		if strings.HasPrefix(line, "--") {
-			cmd := strings.TrimSpace(strings.TrimPrefix(line, "--"))
+		if after, ok := strings.CutPrefix(line, "--"); ok {
+			cmd := strings.TrimSpace(after)
 
 			// make it goose compatible, replace +goose Up to just +up
 			cmd = strings.ToLower(strings.ReplaceAll(cmd, "+goose ", "+"))
