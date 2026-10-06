@@ -100,7 +100,7 @@ func TestMySQLIntegration_StatusUpDown(t *testing.T) {
 
 	require.NoError(t, db.Touch(ctx))
 
-	loader := NewSqlMigrationLoader(config)
+	loader := NewSQLMigrationLoader(config)
 	allMigrations, err := loader.Load(config.MigrationsDirs...)
 	require.NoError(t, err)
 	require.NotEmpty(t, allMigrations)
@@ -126,7 +126,7 @@ func TestMySQLIntegration_StatusUpDown(t *testing.T) {
 	// --- up: apply all pending migrations ---
 	require.NoError(t, UpMigrations(ctx, db, status.Pending))
 
-	for _, table := range []string{"users", "products", "orders"} {
+	for _, table := range []string{testUsersTableName, "products", testOrdersName} {
 		assert.True(t, tableExists(ctx, t, db, table), "table %q should exist after up", table)
 	}
 
@@ -151,7 +151,7 @@ func TestMySQLIntegration_StatusUpDown(t *testing.T) {
 	tail := migrations[len(migrations)-1]
 	require.NoError(t, Down(ctx, db, tail, 0))
 
-	for _, table := range []string{"users", "products", "orders"} {
+	for _, table := range []string{testUsersTableName, "products", testOrdersName} {
 		assert.False(t, tableExists(ctx, t, db, table), "table %q should be dropped after down", table)
 	}
 

@@ -36,6 +36,7 @@ var bufPool = &sync.Pool{
 	},
 }
 
+// Direction identifies whether a migration statement belongs to an up or down migration.
 type Direction int
 
 func (d Direction) String() string {
@@ -51,10 +52,13 @@ func (d Direction) String() string {
 }
 
 const (
-	DirectionUp   Direction = 1
+	// DirectionUp identifies an up-migration statement.
+	DirectionUp Direction = 1
+	// DirectionDown identifies a down-migration statement.
 	DirectionDown Direction = -1
 )
 
+// Statement is a parsed SQL statement and its migration metadata.
 type Statement struct {
 	Direction Direction     `json:"direction" yaml:"direction"`
 	SQL       string        `json:"sql" yaml:"sql"`
@@ -63,25 +67,29 @@ type Statement struct {
 	File      string        `json:"file"`
 }
 
+// MigrationScriptChunk contains the parsed statements and transaction settings for a script.
 type MigrationScriptChunk struct {
 	UpStmts, DownStmts []Statement
 	UseTx              bool
 	Package            string
 }
 
-type MigrationParser struct {
-}
+// MigrationParser parses annotated SQL migration files.
+type MigrationParser struct{}
 
+// ParseBytes parses migration annotations and statements from data.
 func (p *MigrationParser) ParseBytes(data []byte) (*MigrationScriptChunk, error) {
 	buf := bytes.NewBuffer(data)
 	return p.Parse(buf)
 }
 
+// ParseString parses migration annotations and statements from data.
 func (p *MigrationParser) ParseString(data string) (*MigrationScriptChunk, error) {
 	buf := bytes.NewBufferString(data)
 	return p.Parse(buf)
 }
 
+// Parse reads and parses migration annotations and statements from r.
 func (p *MigrationParser) Parse(r io.Reader) (*MigrationScriptChunk, error) {
 	chunk := &MigrationScriptChunk{}
 

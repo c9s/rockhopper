@@ -15,14 +15,18 @@ func NewRedshiftDialect() *RedshiftDialect {
 	return d
 }
 
+// NowExpr returns Redshift's current-time expression for DML.
 func (d *RedshiftDialect) NowExpr() string { return "sysdate" }
 
+// TableNames returns the query used to list tables in the public schema.
 func (d *RedshiftDialect) TableNames() string {
 	return "SELECT DISTINCT tablename FROM PG_TABLE_DEF WHERE schemaname = 'public'"
 }
 
+// CreateTable renders a Redshift CREATE TABLE statement for s.
 func (d *RedshiftDialect) CreateTable(s Schema) string { return buildCreateTable(redshiftDDL{}, s) }
 
+// AddColumn renders a Redshift ALTER TABLE statement for c.
 func (d *RedshiftDialect) AddColumn(table string, c Column) (string, bool) {
 	return buildAddColumn(redshiftDDL{}, table, c), true
 }

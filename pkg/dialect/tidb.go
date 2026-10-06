@@ -14,12 +14,15 @@ func NewTiDBDialect() *TiDBDialect {
 	return d
 }
 
+// TableNames returns the query used to list tables in TiDB.
 func (d *TiDBDialect) TableNames() string {
 	return "SELECT table_name FROM information_schema.tables"
 }
 
+// CreateTable renders a TiDB CREATE TABLE statement for s.
 func (d *TiDBDialect) CreateTable(s Schema) string { return buildCreateTable(tidbDDL{}, s) }
 
+// AddColumn renders a TiDB ALTER TABLE statement for c.
 func (d *TiDBDialect) AddColumn(table string, c Column) (string, bool) {
 	return buildAddColumn(tidbDDL{}, table, c), true
 }

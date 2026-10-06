@@ -14,10 +14,15 @@ const (
 	// carries the full definition (NOT NULL, identity/auto-increment, and, for
 	// SQLite, the inline PRIMARY KEY).
 	ColSerial ColumnType = iota
+	// ColBigInt represents a signed large integer.
 	ColBigInt
+	// ColBool represents a boolean value.
 	ColBool
+	// ColVarchar represents a length-limited string.
 	ColVarchar
+	// ColText represents an unbounded string.
 	ColText
+	// ColTimestamp represents a timestamp value.
 	ColTimestamp
 )
 

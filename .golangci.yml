@@ -1,6 +1,5 @@
 version: "2"
 run:
-  issues-exit-code: 0
   tests: true
 linters:
   default: none
@@ -14,6 +13,13 @@ linters:
     - govet
     - gosec
     - misspell
+  settings:
+    goconst:
+      # Dialect SQL type names and expressions stay literal so each dialect's
+      # type mapping reads as a table; equal spellings across dialects are
+      # independent choices, not shared values.
+      ignore-string-values:
+        - '^(TEXT|TIMESTAMP|NOW\(\))$'
   exclusions:
     generated: lax
     presets:

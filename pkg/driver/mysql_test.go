@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const mysqlDSNWithParseTime = "root:pass@tcp(127.0.0.1:3306)/test?parseTime=true"
+
 // TestNormalizeMySQLDSN_ParseTime guards that the DSN normalizer registered by
 // the MySQL driver always yields parseTime=true, which rockhopper needs so the
 // version table's tstamp column scans into time.Time.
@@ -23,12 +25,12 @@ func TestNormalizeMySQLDSN_ParseTime(t *testing.T) {
 		{
 			name: "adds parseTime when missing",
 			dsn:  "root:pass@tcp(127.0.0.1:3306)/test",
-			want: "root:pass@tcp(127.0.0.1:3306)/test?parseTime=true",
+			want: mysqlDSNWithParseTime,
 		},
 		{
 			name: "keeps parseTime when already set",
-			dsn:  "root:pass@tcp(127.0.0.1:3306)/test?parseTime=true",
-			want: "root:pass@tcp(127.0.0.1:3306)/test?parseTime=true",
+			dsn:  mysqlDSNWithParseTime,
+			want: mysqlDSNWithParseTime,
 		},
 		{
 			name: "appends parseTime alongside other params",

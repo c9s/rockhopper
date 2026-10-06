@@ -246,14 +246,14 @@ func Test_matchPackageName(t *testing.T) {
 	t.Run("simple", func(t *testing.T) {
 		pkgName, err := matchPackageName("@package main")
 		if assert.NoError(t, err) {
-			assert.Equal(t, "main", pkgName)
+			assert.Equal(t, DefaultPackageName, pkgName)
 		}
 	})
 
 	t.Run("with prefix", func(t *testing.T) {
 		pkgName, err := matchPackageName("-- @package main")
 		if assert.NoError(t, err) {
-			assert.Equal(t, "main", pkgName)
+			assert.Equal(t, DefaultPackageName, pkgName)
 		}
 	})
 

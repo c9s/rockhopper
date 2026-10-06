@@ -367,9 +367,9 @@ func (dm *DataMigration) leasePollInterval() time.Duration {
 // carries consistent, filterable structured fields.
 func (dm *DataMigration) logEntry() *log.Entry {
 	fields := log.Fields{
-		"component": dataMigratorComponent,
-		"package":   dm.Package,
-		"version":   dm.Version,
+		"component":                   dataMigratorComponent,
+		dataMigrationPackageLabelName: dm.Package,
+		dataMigrationVersionLabelName: dm.Version,
 	}
 
 	if dm.Name != "" {

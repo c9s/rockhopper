@@ -13,10 +13,10 @@ import (
 )
 
 func TestDB_Open(t *testing.T) {
-	dialect, err := LoadDialect("sqlite3")
+	dialect, err := LoadDialect(DialectSQLite3)
 	assert.NoError(t, err)
 
-	db, err := Open("sqlite3", dialect, ":memory:", TableName)
+	db, err := Open(DialectSQLite3, dialect, ":memory:", TableName)
 	assert.NoError(t, err)
 	assert.NotNil(t, db)
 
@@ -25,10 +25,10 @@ func TestDB_Open(t *testing.T) {
 }
 
 func TestDB_LoadMigrations(t *testing.T) {
-	dialect, err := LoadDialect("sqlite3")
+	dialect, err := LoadDialect(DialectSQLite3)
 	assert.NoError(t, err)
 
-	db, err := Open("sqlite3", dialect, ":memory:", TableName)
+	db, err := Open(DialectSQLite3, dialect, ":memory:", TableName)
 	assert.NoError(t, err)
 	assert.NotNil(t, db)
 
@@ -67,7 +67,7 @@ func TestDB_LoadMigrations_Integration(t *testing.T) {
 		CleanUp func(db *sql.DB) error
 	}{
 		{
-			Driver: "mysql",
+			Driver: DialectMySQL,
 			DSN:    "",
 			CleanUp: func(db *sql.DB) error {
 				_, err := db.Exec("DROP TABLE " + TableName)
@@ -75,7 +75,7 @@ func TestDB_LoadMigrations_Integration(t *testing.T) {
 			},
 		},
 		{
-			Driver: "sqlite3",
+			Driver: DialectSQLite3,
 			DSN:    ":memory:",
 		},
 	}

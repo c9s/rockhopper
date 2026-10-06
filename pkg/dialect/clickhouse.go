@@ -3,6 +3,8 @@ package dialect
 import (
 	"fmt"
 	"strings"
+
+	"github.com/c9s/rockhopper/v2/internal/column"
 )
 
 // ClickHouseDialect implements Dialect for ClickHouse.
@@ -35,9 +37,13 @@ func NewClickHouseDialect() *ClickHouseDialect {
 	return d
 }
 
+// Placeholder returns the numbered bind marker for n.
 func (d *ClickHouseDialect) Placeholder(n int) string { return fmt.Sprintf("$%d", n) }
-func (d *ClickHouseDialect) NowExpr() string          { return "now()" }
 
+// NowExpr returns ClickHouse's current-time expression for DML.
+func (d *ClickHouseDialect) NowExpr() string { return "now()" }
+
+// TableNames returns the query used to list tables in the current database.
 func (d *ClickHouseDialect) TableNames() string {
 	return "SELECT name FROM system.tables WHERE database = currentDatabase()"
 }
@@ -51,8 +57,10 @@ func (d *ClickHouseDialect) Delete(table string, keys []Col) (string, []any) {
 	return fmt.Sprintf("ALTER TABLE %s DELETE WHERE %s SETTINGS mutations_sync = 2", table, where), args
 }
 
+// CreateTable renders a ClickHouse CREATE TABLE statement for s.
 func (d *ClickHouseDialect) CreateTable(s Schema) string { return buildClickHouseCreateTable(s) }
 
+// AddColumn renders a ClickHouse ALTER TABLE statement for c.
 func (d *ClickHouseDialect) AddColumn(table string, c Column) (string, bool) {
 	return fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", table, clickhouseColumnDef(c)), true
 }
@@ -119,7 +127,7 @@ func clickhouseOrderBy(s Schema) string {
 	}
 
 	var keys []string
-	for _, name := range []string{"package", "version_id"} {
+	for _, name := range []string{column.Package, column.VersionID} {
 		if has(name) {
 			keys = append(keys, name)
 		}

@@ -28,7 +28,7 @@ var CompileCmd = &cobra.Command{
 	RunE:         compile,
 }
 
-func compile(cmd *cobra.Command, args []string) error {
+func compile(cmd *cobra.Command, _ []string) error {
 	if err := checkConfig(config); err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func compile(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	loader := rockhopper.NewSqlMigrationLoader(config)
+	loader := rockhopper.NewSQLMigrationLoader(config)
 
 	allMigrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {

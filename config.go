@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config contains the database connection and migration-loading settings.
 type Config struct {
 	Driver  string `json:"driver" yaml:"driver" env:"ROCKHOPPER_DRIVER"`
 	Dialect string `json:"dialect" yaml:"dialect" env:"ROCKHOPPER_DIALECT"`
@@ -33,6 +34,7 @@ type Config struct {
 	IncludePackages []string `json:"includePackages" yaml:"includePackages"`
 }
 
+// LoadConfig reads a YAML configuration file and applies environment overrides.
 func LoadConfig(configFile string) (*Config, error) {
 	data, err := os.ReadFile(configFile)
 	if err != nil {

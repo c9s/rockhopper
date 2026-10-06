@@ -7,13 +7,10 @@ on:
 
 jobs:
   build:
+    name: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    strategy:
-      matrix:
-        go-version:
-        - "1.27"
     env:
       GITHUB_CI: true
       MYSQL_DATABASE: bbgo
@@ -68,7 +65,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version-file: go.mod
 
     - name: Test Migration SQL Files For MySQL
       run: |
@@ -91,11 +88,8 @@ jobs:
         go test -race -coverprofile coverage.txt -covermode atomic ./...
         sed -i -e '/_requestgen.go/d' coverage.txt
 
-    - name: Revive Check
-      uses: morphy2k/revive-action@v2.7.7 # https://github.com/mgechev/revive/issues/956
-      with:
-        reporter: github-pr-review
-        fail_on_error: true
+    - name: Revive
+      run: go run github.com/mgechev/revive@v1.17.0 -config revive.toml ./...
 
     - name: Upload Coverage Report
       uses: codecov/codecov-action@v5

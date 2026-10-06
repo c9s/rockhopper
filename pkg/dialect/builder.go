@@ -1,8 +1,11 @@
+// Package dialect implements database-specific SQL and DDL generation.
 package dialect
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/c9s/rockhopper/v2/internal/column"
 )
 
 // Tokens is the minimal set of dialect-specific lexical choices the CRUD builder
@@ -94,6 +97,7 @@ type LeaseCRUD struct {
 // NewLeaseCRUD binds a lease-capable CRUD builder to a dialect's tokens.
 func NewLeaseCRUD(t Tokens) LeaseCRUD { return LeaseCRUD{CRUD: NewCRUD(t)} }
 
+// Insert builds an INSERT statement and its ordered bind arguments.
 func (c CRUD) Insert(table string, cols []Col) (string, []any) {
 	names := make([]string, len(cols))
 	marks := make([]string, len(cols))
@@ -109,11 +113,13 @@ func (c CRUD) Insert(table string, cols []Col) (string, []any) {
 	return q, args
 }
 
+// Delete builds a DELETE statement constrained by keys.
 func (c CRUD) Delete(table string, keys []Col) (string, []any) {
 	where, args := c.eqClauses(keys, 0, " AND ")
 	return fmt.Sprintf("DELETE FROM %s WHERE %s", table, where), args
 }
 
+// Select builds a SELECT statement with optional filters, ordering, and limit.
 func (c CRUD) Select(table string, cols []string, keys []Col, opt SelectOpt) (string, []any) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "SELECT %s FROM %s", strings.Join(cols, ", "), table)
@@ -144,6 +150,7 @@ func (c CRUD) Select(table string, cols []string, keys []Col, opt SelectOpt) (st
 	return b.String(), args
 }
 
+// Update builds an UPDATE statement with filters and optional assignments.
 func (c CRUD) Update(table string, set, keys []Col, opt UpdateOpt) (string, []any) {
 	var assigns []string
 	var args []any
@@ -178,13 +185,16 @@ func (c CRUD) Update(table string, set, keys []Col, opt UpdateOpt) (string, []an
 	return q, args
 }
 
+// AcquireLease builds a conditional UPDATE that claims an available lease.
 func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresAt, now int64) (string, []any) {
 	n := 0
 	next := func() string { n++; return c.t.Placeholder(n) }
 
 	var args []any
-	set := fmt.Sprintf("lease_owner = %s, lease_expires_at = %s, updated_at = %s",
-		next(), next(), c.t.NowExpr())
+	set := fmt.Sprintf("%s = %s, %s = %s, %s = %s",
+		column.LeaseOwner, next(),
+		column.LeaseExpiresAt, next(),
+		column.UpdatedAt, c.t.NowExpr())
 	args = append(args, owner, expiresAt)
 
 	conds := make([]string, len(keys))
@@ -193,8 +203,9 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 		args = append(args, k.Val)
 	}
 
-	guard := fmt.Sprintf("(lease_owner IS NULL OR lease_owner = %s OR lease_expires_at < %s)",
-		next(), next())
+	guard := fmt.Sprintf("(%s IS NULL OR %s = %s OR %s < %s)",
+		column.LeaseOwner, column.LeaseOwner, next(),
+		column.LeaseExpiresAt, next())
 	args = append(args, owner, now)
 
 	q := fmt.Sprintf("UPDATE %s SET %s WHERE %s AND %s",
@@ -202,21 +213,23 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 	return q, args
 }
 
+// CommitLease builds an UPDATE that persists a batch while renewing its lease.
 func (c LeaseCRUD) CommitLease(table string, set, keys []Col, owner string) (string, []any) {
 	return c.Update(table, set, keys, UpdateOpt{
-		NowCols: []string{"updated_at"},
-		Lock:    &Col{Name: "lease_owner", Val: owner},
+		NowCols: []string{column.UpdatedAt},
+		Lock:    &Col{Name: column.LeaseOwner, Val: owner},
 	})
 }
 
+// ReleaseLease builds an UPDATE that records a terminal status and clears a lease.
 func (c LeaseCRUD) ReleaseLease(table, status string, keys []Col, owner string) (string, []any) {
 	return c.Update(table,
-		[]Col{{Name: "status", Val: status}, {Name: "lease_expires_at", Val: int64(0)}},
+		[]Col{{Name: column.Status, Val: status}, {Name: column.LeaseExpiresAt, Val: int64(0)}},
 		keys,
 		UpdateOpt{
-			NowCols:  []string{"updated_at"},
-			NullCols: []string{"lease_owner"},
-			Lock:     &Col{Name: "lease_owner", Val: owner},
+			NowCols:  []string{column.UpdatedAt},
+			NullCols: []string{column.LeaseOwner},
+			Lock:     &Col{Name: column.LeaseOwner, Val: owner},
 		})
 }
 

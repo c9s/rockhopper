@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// RegistryKey identifies a registered migration by package and version.
 type RegistryKey struct {
 	Package string
 	Version int64

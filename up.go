@@ -32,6 +32,7 @@ func UpMigrations(ctx context.Context, db *DB, migrations MigrationSlice, callba
 	return nil
 }
 
+// UpBySteps applies at most steps migrations starting at m.
 func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks ...func(m *Migration)) error {
 	for ; steps > 0 && m != nil; m = m.Next {
 		descMigration("upgrading", m)
@@ -50,6 +51,7 @@ func UpBySteps(ctx context.Context, db *DB, m *Migration, steps int, callbacks .
 	return nil
 }
 
+// Upgrade applies all pending migrations in each package.
 func Upgrade(ctx context.Context, db *DB, migrations MigrationSlice) error {
 	migrationMap := migrations.MapByPackage()
 	for _, pkgMigrations := range migrationMap {
@@ -65,9 +67,7 @@ func Upgrade(ctx context.Context, db *DB, migrations MigrationSlice) error {
 			startMigration = lastAppliedMigration.Next
 		}
 
-		err = Up(ctx, db, startMigration, 0, func(m *Migration) {
-			// log.Infof("migration %d is applied", m.Version)
-		})
+		err = Up(ctx, db, startMigration, 0)
 
 		if err != nil {
 			return err
@@ -77,8 +77,7 @@ func Upgrade(ctx context.Context, db *DB, migrations MigrationSlice) error {
 	return nil
 }
 
-// UpgradeFromGo runs the migration upgrades from the registered go-code migration
-// parameter packageNames is the package list you want to filter
+// UpgradeFromGo applies registered Go migrations, optionally filtered by package name.
 func UpgradeFromGo(ctx context.Context, db *DB, packageNames ...string) error {
 	var migrations MigrationSlice
 	for _, migration := range registeredGoMigrations {

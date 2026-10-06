@@ -27,7 +27,7 @@ var SkillsCmd = &cobra.Command{
 		"them in sync with the CLI.",
 
 	// skills commands must work without a config file
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 		return nil
 	},
 }
@@ -37,7 +37,7 @@ var SkillsListCmd = &cobra.Command{
 	Short: "list the bundled Claude Code skills",
 
 	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		names, err := rockhopper.SkillNames()
 		if err != nil {
 			return err
@@ -56,7 +56,7 @@ var SkillsInstallCmd = &cobra.Command{
 	Short: "install the bundled Claude Code skills into a project's .claude/skills directory",
 
 	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		dir, err := cmd.Flags().GetString("dir")
 		if err != nil {
 			return err

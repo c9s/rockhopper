@@ -5,13 +5,13 @@ import (
 	"strings"
 )
 
-// buildMySqlDSN builds the data source name from environment variables.
+// buildMySQLDSN builds the data source name from environment variables.
 //
 // By default it reads MYSQL_ prefixed environment variables. If any MYSQL8_
 // prefixed environment variable is configured, the MYSQL8_ prefix is used
 // instead. This lets a dedicated MySQL 8 configuration coexist with the
 // default one without overriding it.
-func buildMySqlDSN() (string, error) {
+func buildMySQLDSN() (string, error) {
 	prefix := "MYSQL_"
 	if hasEnvWithPrefix("MYSQL8_") {
 		prefix = "MYSQL8_"

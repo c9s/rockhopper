@@ -11,12 +11,15 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/c9s/rockhopper/v2/internal/column"
 	"github.com/c9s/rockhopper/v2/pkg/dialect"
 	"github.com/c9s/rockhopper/v2/pkg/driver"
 )
 
 const (
-	VersionGoose        = 0
+	// VersionGoose is the initial version used by the legacy Goose table.
+	VersionGoose = 0
+	// VersionRockhopperV1 is the initial version used by Rockhopper's table.
 	VersionRockhopperV1 = 1
 )
 
@@ -26,10 +29,14 @@ const legacyGooseTableName = "goose_db_version"
 // TableName is the migration version table name
 const TableName = "rockhopper_versions"
 
+const defaultPackageSQLLiteral = "'" + DefaultPackageName + "'"
+
+// SQLExecutor executes SQL statements with a context and bind arguments.
 type SQLExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+// DB wraps a database/sql connection with migration dialect and table settings.
 type DB struct {
 	*sql.DB
 
@@ -38,6 +45,7 @@ type DB struct {
 	tableName  string
 }
 
+// OpenWithConfig opens a database using the supplied Rockhopper configuration.
 func OpenWithConfig(config *Config) (*DB, error) {
 	dialectName := config.Dialect
 	if len(dialectName) == 0 {
@@ -60,10 +68,11 @@ func OpenWithConfig(config *Config) (*DB, error) {
 	return Open(config.Driver, dialect, dsn, TableName)
 }
 
+// BuildDSNFromEnvVars builds a data source name from driver-specific environment variables.
 func BuildDSNFromEnvVars(driver string) (string, error) {
 	switch driver {
 	case DialectMySQL:
-		return buildMySqlDSN()
+		return buildMySQLDSN()
 
 	}
 	return "", fmt.Errorf("can not build dsn for driver %s", driver)
@@ -80,6 +89,7 @@ func castDriverName(driver string) string {
 	return driver
 }
 
+// OpenWithEnv opens a database using environment variables with the given prefix.
 func OpenWithEnv(prefix string) (*DB, error) {
 	driverName := os.Getenv(prefix + "_DRIVER")
 	if driverName == "" {
@@ -130,6 +140,7 @@ func Open(driverName string, dialect SQLDialect, dsn string, tableName string) (
 	return New(driverName, dialect, db, tableName), nil
 }
 
+// New wraps an existing database connection with a dialect and migration table name.
 func New(driverName string, dialect SQLDialect, db *sql.DB, tableName string) *DB {
 	return &DB{
 		dialect:    dialect,
@@ -141,8 +152,8 @@ func New(driverName string, dialect SQLDialect, db *sql.DB, tableName string) *D
 
 func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
 	q, args := db.dialect.Delete(db.tableName, []dialect.Col{
-		{Name: "package", Val: pkgName},
-		{Name: "version_id", Val: version},
+		{Name: column.Package, Val: pkgName},
+		{Name: column.VersionID, Val: version},
 	})
 	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to delete migration record")
@@ -177,10 +188,10 @@ func (db *DB) getTableNames(ctx context.Context) ([]string, error) {
 
 func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName, sourceFile string, version int64, applied bool) error {
 	q, args := db.dialect.Insert(db.tableName, []dialect.Col{
-		{Name: "package", Val: pkgName},
-		{Name: "source_file", Val: sourceFile},
-		{Name: "version_id", Val: version},
-		{Name: "is_applied", Val: applied},
+		{Name: column.Package, Val: pkgName},
+		{Name: column.SourceFile, Val: sourceFile},
+		{Name: column.VersionID, Val: version},
+		{Name: column.IsApplied, Val: applied},
 	})
 	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
@@ -196,12 +207,12 @@ func (db *DB) LoadMigration(ctx context.Context, m *Migration) (*Migration, erro
 	var record MigrationRecord
 
 	q, args := db.dialect.Select(db.tableName,
-		[]string{"id", "tstamp", "is_applied"},
+		[]string{column.RecordID, column.Timestamp, column.IsApplied},
 		[]dialect.Col{
-			{Name: "package", Val: m.Package},
-			{Name: "version_id", Val: m.Version},
+			{Name: column.Package, Val: m.Package},
+			{Name: column.VersionID, Val: m.Version},
 		},
-		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: "tstamp", Desc: true}}, Limit: 1})
+		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: column.Timestamp, Desc: true}}, Limit: 1})
 
 	row := db.QueryRowContext(ctx, q, args...)
 	if err := row.Err(); err != nil {
@@ -218,19 +229,21 @@ func (db *DB) LoadMigration(ctx context.Context, m *Migration) (*Migration, erro
 	return m, nil
 }
 
-// LoadMigrationRecords
+// LoadMigrationRecords loads version records for the default migration package.
 //
-// Deprecated: use LoadMigrationRecordsByPackage instead
+// Deprecated: use LoadMigrationRecordsByPackage.
 func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 	return db.LoadMigrationRecordsByPackage(context.Background(), DefaultPackageName)
 }
 
+// LoadMigrationRecordsByPackage loads version records for a migration package.
 func (db *DB) LoadMigrationRecordsByPackage(ctx context.Context, pkgName string) ([]MigrationRecord, error) {
 	q, args := db.dialect.Select(db.tableName,
-		[]string{"package", "version_id", "is_applied", "tstamp"},
-		[]dialect.Col{{Name: "package", Val: pkgName}},
-		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: "id", Desc: true}}})
+		[]string{column.Package, column.VersionID, column.IsApplied, column.Timestamp},
+		[]dialect.Col{{Name: column.Package, Val: pkgName}},
+		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: column.RecordID, Desc: true}}})
 
+	//nolint:gosec // The dialect builds SQL from configured identifiers; runtime values are bind arguments.
 	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -303,8 +316,8 @@ func (db *DB) upgradeCoreMigrations(_ context.Context, _ int64) error {
 // queryLatestVersion selects the latest db version of a package
 func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, error) {
 	q, args := db.dialect.Select(TableName,
-		[]string{"MAX(version_id)"},
-		[]dialect.Col{{Name: "package", Val: pkgName}},
+		[]string{"MAX(" + column.VersionID + ")"},
+		[]dialect.Col{{Name: column.Package, Val: pkgName}},
 		dialect.SelectOpt{})
 
 	row := db.QueryRowContext(ctx, q, args...)
@@ -313,13 +326,13 @@ func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, er
 		return 0, convertNoRowsErrToNil(err)
 	}
 
-	var versionId sql.NullInt64
-	if err := row.Scan(&versionId); err != nil {
+	var versionID sql.NullInt64
+	if err := row.Scan(&versionID); err != nil {
 		return 0, err
 	}
 
-	if versionId.Valid {
-		return versionId.Int64, nil
+	if versionID.Valid {
+		return versionID.Int64, nil
 	}
 
 	return 0, nil
@@ -339,26 +352,29 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 	// Add the package column to the legacy table so its rows can be migrated.
 	// SQLite reports AddColumn as unsupported and is skipped here (as before).
 	if alterSQL, supported := db.dialect.AddColumn(legacyGooseTableName, dialect.Column{
-		Name:    "package",
+		Name:    column.Package,
 		Type:    dialect.ColVarchar,
 		Size:    packageColumnSize,
 		NotNull: true,
-		Default: "'main'",
+		Default: defaultPackageSQLLiteral,
 	}); supported {
-		if err := execAndCheckErr(tx, ctx, alterSQL); err != nil {
+		if err := execAndCheckErr(ctx, tx, alterSQL); err != nil {
 			return rollbackAndLogErr(err, tx, "unable to alter table")
 		}
 	}
 
-	if err := execAndCheckErr(tx, ctx,
-		fmt.Sprintf(`INSERT INTO %s(package, version_id, is_applied, tstamp) SELECT 'main', version_id, is_applied, tstamp FROM %s`,
+	if err := execAndCheckErr(ctx, tx,
+		// The SELECT columns are goose's fixed schema, so they stay literal.
+		fmt.Sprintf(`INSERT INTO %s(%s, %s, %s, %s) SELECT %s, version_id, is_applied, tstamp FROM %s`,
 			TableName,
+			column.Package, column.VersionID, column.IsApplied, column.Timestamp,
+			defaultPackageSQLLiteral,
 			legacyGooseTableName),
 	); err != nil {
 		return rollbackAndLogErr(err, tx, "unable to execute insert from select")
 	}
 
-	if err := execAndCheckErr(tx, ctx, fmt.Sprintf(`DROP TABLE %s`, legacyGooseTableName)); err != nil {
+	if err := execAndCheckErr(ctx, tx, fmt.Sprintf(`DROP TABLE %s`, legacyGooseTableName)); err != nil {
 		return rollbackAndLogErr(err, tx, "unable to drop legacy table")
 	}
 
@@ -412,12 +428,12 @@ func versionSchema(tableName string) dialect.Schema {
 	return dialect.Schema{
 		Table: tableName,
 		Columns: []dialect.Column{
-			{Name: "id", Type: dialect.ColSerial, PrimaryKey: true},
-			{Name: "package", Type: dialect.ColVarchar, Size: packageColumnSize, NotNull: true, Default: "'main'"},
-			{Name: "source_file", Type: dialect.ColVarchar, Size: 255, NotNull: true, Default: "''"},
-			{Name: "version_id", Type: dialect.ColBigInt, NotNull: true},
-			{Name: "is_applied", Type: dialect.ColBool, NotNull: true},
-			{Name: "tstamp", Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
+			{Name: column.RecordID, Type: dialect.ColSerial, PrimaryKey: true},
+			{Name: column.Package, Type: dialect.ColVarchar, Size: packageColumnSize, NotNull: true, Default: defaultPackageSQLLiteral},
+			{Name: column.SourceFile, Type: dialect.ColVarchar, Size: 255, NotNull: true, Default: "''"},
+			{Name: column.VersionID, Type: dialect.ColBigInt, NotNull: true},
+			{Name: column.IsApplied, Type: dialect.ColBool, NotNull: true},
+			{Name: column.Timestamp, Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
 		},
 	}
 }
@@ -441,7 +457,7 @@ func rollbackAndLogErr(originErr error, txn *sql.Tx, msg string, args ...any) er
 	return originErr
 }
 
-func execAndCheckErr(db SqlExecutor, ctx context.Context, sql string, args ...any) error {
+func execAndCheckErr(ctx context.Context, db SqlExecutor, sql string, args ...any) error {
 	_, err := db.ExecContext(ctx, sql, args...)
 	if err != nil {
 		log.WithError(err).Errorf("unable to execute SQL: %s", sql)
@@ -459,6 +475,7 @@ func convertNoRowsErrToNil(err error) error {
 	return err
 }
 
+// FindLastAppliedMigration returns the latest applied migration in allMigrations.
 func (db *DB) FindLastAppliedMigration(
 	ctx context.Context, allMigrations MigrationSlice,
 ) (int, *Migration, error) {

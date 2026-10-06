@@ -66,6 +66,7 @@ func InstallSkills(dir string, force bool) (written, skipped []string, err error
 			return mkErr
 		}
 
+		//nolint:gosec // Skill files are public project assets and must be readable by collaborators.
 		if writeErr := os.WriteFile(dest, data, 0o644); writeErr != nil {
 			return writeErr
 		}

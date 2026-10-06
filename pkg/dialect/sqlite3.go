@@ -15,12 +15,18 @@ func NewSqlite3Dialect() *Sqlite3Dialect {
 	return d
 }
 
+// Placeholder returns SQLite's question-mark bind marker.
 func (d *Sqlite3Dialect) Placeholder(int) string { return "?" }
-func (d *Sqlite3Dialect) NowExpr() string        { return "datetime('now')" }
+
+// NowExpr returns SQLite's current-time expression for DML.
+func (d *Sqlite3Dialect) NowExpr() string { return "datetime('now')" }
+
+// TableNames returns the query used to list SQLite tables.
 func (d *Sqlite3Dialect) TableNames() string {
 	return "SELECT name FROM sqlite_master WHERE type='table'"
 }
 
+// CreateTable renders a SQLite CREATE TABLE statement for s.
 func (d *Sqlite3Dialect) CreateTable(s Schema) string { return buildCreateTable(sqliteDDL{}, s) }
 
 // AddColumn is intentionally unsupported for SQLite: the legacy-table migration
