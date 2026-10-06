@@ -13,8 +13,6 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/c9s/rockhopper/v2/pkg/dialect"
 )
 
 // DataMigrationTableName is the table that tracks data-migration progress
@@ -370,7 +368,7 @@ func (dm *DataMigration) leasePollInterval() time.Duration {
 func (dm *DataMigration) logEntry() *log.Entry {
 	fields := log.Fields{
 		"component":                   dataMigratorComponent,
-		dialect.PackageColumnName:     dm.Package,
+		dataMigrationPackageLabelName: dm.Package,
 		dataMigrationVersionLabelName: dm.Version,
 	}
 

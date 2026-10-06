@@ -19,7 +19,7 @@ func NewMySQLDialect() *MySQLDialect {
 func (d *MySQLDialect) Placeholder(int) string { return "?" }
 
 // NowExpr returns MySQL's current-time expression for DML.
-func (d *MySQLDialect) NowExpr() string { return sqlNowExpression }
+func (d *MySQLDialect) NowExpr() string { return "NOW()" }
 
 // TableNames returns the query used to list tables in the current database.
 func (d *MySQLDialect) TableNames() string { return "SHOW TABLES" }
@@ -46,13 +46,13 @@ func (mysqlDDL) sqlType(c Column) string {
 	case ColVarchar:
 		return fmt.Sprintf("VARCHAR(%d)", c.Size)
 	case ColText:
-		return sqlTextType
+		return "TEXT"
 	case ColTimestamp:
-		return sqlTimestampType
+		return "TIMESTAMP"
 	}
 	return ""
 }
 
-func (mysqlDDL) nowDefault() string { return sqlNowExpression }
+func (mysqlDDL) nowDefault() string { return "NOW()" }
 func (mysqlDDL) ifNotExists() bool  { return true }
 func (mysqlDDL) inlinePK() bool     { return false }

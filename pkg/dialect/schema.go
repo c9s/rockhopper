@@ -5,31 +5,6 @@ import (
 	"strings"
 )
 
-const (
-	// PackageColumnName is the SQL column that records a migration's package.
-	PackageColumnName = "package"
-	// VersionIDColumnName is the SQL column that records a migration's version.
-	VersionIDColumnName = "version_id"
-	// IsAppliedColumnName is the SQL column that records whether a migration is applied.
-	IsAppliedColumnName = "is_applied"
-	// RecordIDColumnName is the SQL column that identifies a migration record.
-	RecordIDColumnName = "id"
-	// TimestampColumnName is the SQL column that stores a migration record's timestamp.
-	TimestampColumnName = "tstamp"
-	// DataMigrationStatusColumnName is the SQL column that records a data migration's status.
-	DataMigrationStatusColumnName = "status"
-	// DataMigrationCheckpointColumnName is the SQL column that stores a data migration's checkpoint.
-	DataMigrationCheckpointColumnName = "checkpoint"
-	// DataMigrationLeaseOwnerColumnName is the SQL column that stores a data migration lease owner.
-	DataMigrationLeaseOwnerColumnName = "lease_owner"
-	// DataMigrationLeaseExpiresAtColumnName is the SQL column that stores a data migration lease expiry.
-	DataMigrationLeaseExpiresAtColumnName = "lease_expires_at"
-
-	sqlTextType      = "TEXT"
-	sqlTimestampType = "TIMESTAMP"
-	sqlNowExpression = "NOW()"
-)
-
 // ColumnType is an abstract column type. Each dialect maps it to its own DDL
 // spelling (see the ddlRenderer implementations in the per-dialect files).
 type ColumnType int

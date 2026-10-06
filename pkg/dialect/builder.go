@@ -4,6 +4,8 @@ package dialect
 import (
 	"fmt"
 	"strings"
+
+	"github.com/c9s/rockhopper/v2/internal/column"
 )
 
 // Tokens is the minimal set of dialect-specific lexical choices the CRUD builder
@@ -189,10 +191,10 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 	next := func() string { n++; return c.t.Placeholder(n) }
 
 	var args []any
-	set := fmt.Sprintf("%s = %s, %s = %s, updated_at = %s",
-		DataMigrationLeaseOwnerColumnName, next(),
-		DataMigrationLeaseExpiresAtColumnName, next(),
-		c.t.NowExpr())
+	set := fmt.Sprintf("%s = %s, %s = %s, %s = %s",
+		column.LeaseOwner, next(),
+		column.LeaseExpiresAt, next(),
+		column.UpdatedAt, c.t.NowExpr())
 	args = append(args, owner, expiresAt)
 
 	conds := make([]string, len(keys))
@@ -202,8 +204,8 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 	}
 
 	guard := fmt.Sprintf("(%s IS NULL OR %s = %s OR %s < %s)",
-		DataMigrationLeaseOwnerColumnName, DataMigrationLeaseOwnerColumnName, next(),
-		DataMigrationLeaseExpiresAtColumnName, next())
+		column.LeaseOwner, column.LeaseOwner, next(),
+		column.LeaseExpiresAt, next())
 	args = append(args, owner, now)
 
 	q := fmt.Sprintf("UPDATE %s SET %s WHERE %s AND %s",
@@ -214,20 +216,20 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 // CommitLease builds an UPDATE that persists a batch while renewing its lease.
 func (c LeaseCRUD) CommitLease(table string, set, keys []Col, owner string) (string, []any) {
 	return c.Update(table, set, keys, UpdateOpt{
-		NowCols: []string{"updated_at"},
-		Lock:    &Col{Name: DataMigrationLeaseOwnerColumnName, Val: owner},
+		NowCols: []string{column.UpdatedAt},
+		Lock:    &Col{Name: column.LeaseOwner, Val: owner},
 	})
 }
 
 // ReleaseLease builds an UPDATE that records a terminal status and clears a lease.
 func (c LeaseCRUD) ReleaseLease(table, status string, keys []Col, owner string) (string, []any) {
 	return c.Update(table,
-		[]Col{{Name: DataMigrationStatusColumnName, Val: status}, {Name: DataMigrationLeaseExpiresAtColumnName, Val: int64(0)}},
+		[]Col{{Name: column.Status, Val: status}, {Name: column.LeaseExpiresAt, Val: int64(0)}},
 		keys,
 		UpdateOpt{
-			NowCols:  []string{"updated_at"},
-			NullCols: []string{DataMigrationLeaseOwnerColumnName},
-			Lock:     &Col{Name: DataMigrationLeaseOwnerColumnName, Val: owner},
+			NowCols:  []string{column.UpdatedAt},
+			NullCols: []string{column.LeaseOwner},
+			Lock:     &Col{Name: column.LeaseOwner, Val: owner},
 		})
 }
 

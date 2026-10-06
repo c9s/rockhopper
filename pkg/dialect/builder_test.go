@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/c9s/rockhopper/v2/internal/column"
 )
 
 const (
@@ -52,7 +54,7 @@ func TestCRUD_Insert(t *testing.T) {
 func TestCRUD_Delete(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
-			sql, args := c.b.Delete("t", []Col{{PackageColumnName, "p"}, {VersionIDColumnName, int64(7)}})
+			sql, args := c.b.Delete("t", []Col{{column.Package, "p"}, {column.VersionID, int64(7)}})
 			if c.name == testMySQLDialectName {
 				assert.Equal(t, "DELETE FROM t WHERE package = ? AND version_id = ?", sql)
 			} else {
@@ -67,9 +69,9 @@ func TestCRUD_SelectOrderLimit(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.Select("t",
-				[]string{RecordIDColumnName, TimestampColumnName, IsAppliedColumnName},
-				[]Col{{PackageColumnName, "p"}},
-				SelectOpt{OrderBy: []Order{{Col: TimestampColumnName, Desc: true}}, Limit: 1})
+				[]string{column.RecordID, column.Timestamp, column.IsApplied},
+				[]Col{{column.Package, "p"}},
+				SelectOpt{OrderBy: []Order{{Col: column.Timestamp, Desc: true}}, Limit: 1})
 			if c.name == testMySQLDialectName {
 				assert.Equal(t, "SELECT id, tstamp, is_applied FROM t WHERE package = ? ORDER BY tstamp DESC LIMIT 1", sql)
 			} else {
@@ -95,7 +97,7 @@ func TestCRUD_AcquireLease(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.AcquireLease("t",
-				[]Col{{VersionIDColumnName, int64(5)}},
+				[]Col{{column.VersionID, int64(5)}},
 				testLeaseOwner, int64(200), int64(100))
 			if c.name == testMySQLDialectName {
 				assert.Equal(t,
@@ -117,8 +119,8 @@ func TestCRUD_CommitLease(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.CommitLease("t",
-				[]Col{{DataMigrationStatusColumnName, "running"}, {DataMigrationCheckpointColumnName, "cp"}},
-				[]Col{{VersionIDColumnName, int64(5)}},
+				[]Col{{column.Status, "running"}, {column.Checkpoint, "cp"}},
+				[]Col{{column.VersionID, int64(5)}},
 				testLeaseOwner)
 			if c.name == testMySQLDialectName {
 				assert.Equal(t,
@@ -140,7 +142,7 @@ func TestCRUD_ReleaseLease(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.ReleaseLease("t", "completed",
-				[]Col{{VersionIDColumnName, int64(5)}},
+				[]Col{{column.VersionID, int64(5)}},
 				testLeaseOwner)
 			if c.name == testMySQLDialectName {
 				assert.Equal(t,

@@ -19,7 +19,7 @@ func NewPostgresDialect() *PostgresDialect {
 func (d *PostgresDialect) Placeholder(n int) string { return fmt.Sprintf("$%d", n) }
 
 // NowExpr returns PostgreSQL's current-time expression for DML.
-func (d *PostgresDialect) NowExpr() string { return sqlNowExpression }
+func (d *PostgresDialect) NowExpr() string { return "NOW()" }
 
 // TableNames returns the query used to list tables in the public schema.
 func (d *PostgresDialect) TableNames() string {
@@ -49,13 +49,13 @@ func (pgDDL) sqlType(c Column) string {
 	case ColVarchar:
 		return fmt.Sprintf("VARCHAR(%d)", c.Size)
 	case ColText:
-		return sqlTextType
+		return "TEXT"
 	case ColTimestamp:
-		return sqlTimestampType
+		return "TIMESTAMP"
 	}
 	return ""
 }
 
-func (pgDDL) nowDefault() string { return sqlNowExpression }
+func (pgDDL) nowDefault() string { return "NOW()" }
 func (pgDDL) ifNotExists() bool  { return true }
 func (pgDDL) inlinePK() bool     { return false }

@@ -5,8 +5,14 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+)
 
-	"github.com/c9s/rockhopper/v2/pkg/dialect"
+// Label names shared by the data-migration metrics and log fields. They are
+// deliberately independent of the SQL column names, so renaming a column does
+// not rename a metric label that dashboards depend on.
+const (
+	dataMigrationPackageLabelName = "package"
+	dataMigrationVersionLabelName = "version"
 )
 
 // Data-migration Prometheus metrics. The collectors are created but not
@@ -25,7 +31,7 @@ var (
 	dataMigrationAppliedVersion = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "rockhopper_data_migration_applied_version",
 		Help: "Version id of the most recently completed data migration, per package.",
-	}, []string{dialect.PackageColumnName})
+	}, []string{dataMigrationPackageLabelName})
 
 	// dataMigrationUpdatedTimestamp is the Unix time in milliseconds of the last
 	// committed batch of a data migration — i.e. when its state row was last
@@ -33,14 +39,14 @@ var (
 	dataMigrationUpdatedTimestamp = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "rockhopper_data_migration_updated_timestamp_milliseconds",
 		Help: "Unix timestamp in milliseconds of the last committed batch of a data migration.",
-	}, []string{dialect.PackageColumnName, dataMigrationVersionLabelName})
+	}, []string{dataMigrationPackageLabelName, dataMigrationVersionLabelName})
 
 	// dataMigrationPlanDuration observes how long Plan took, in milliseconds.
 	dataMigrationPlanDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "rockhopper_data_migration_plan_duration_milliseconds",
 		Help:    "Wall-clock duration of a data migration's Plan call, in milliseconds.",
 		Buckets: dataMigrationDurationBuckets,
-	}, []string{dialect.PackageColumnName, dataMigrationVersionLabelName})
+	}, []string{dataMigrationPackageLabelName, dataMigrationVersionLabelName})
 
 	// dataMigrationBatchDuration observes how long each Batch took, in
 	// milliseconds.
@@ -48,7 +54,7 @@ var (
 		Name:    "rockhopper_data_migration_batch_duration_milliseconds",
 		Help:    "Wall-clock duration of a single data migration Batch call, in milliseconds.",
 		Buckets: dataMigrationDurationBuckets,
-	}, []string{dialect.PackageColumnName, dataMigrationVersionLabelName})
+	}, []string{dataMigrationPackageLabelName, dataMigrationVersionLabelName})
 
 	// dataMigrationProgressPercent is the migrator-reported completion percentage
 	// (0-100) of a data migration. Present only for migrators that implement
@@ -56,26 +62,26 @@ var (
 	dataMigrationProgressPercent = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "rockhopper_data_migration_progress_percent",
 		Help: "Migrator-reported completion percentage (0-100) of a data migration.",
-	}, []string{dialect.PackageColumnName, dataMigrationVersionLabelName})
+	}, []string{dataMigrationPackageLabelName, dataMigrationVersionLabelName})
 
 	// dataMigrationProgressCompleted is the migrator-reported units of work done.
 	dataMigrationProgressCompleted = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "rockhopper_data_migration_progress_completed",
 		Help: "Migrator-reported units of work completed by a data migration.",
-	}, []string{dialect.PackageColumnName, dataMigrationVersionLabelName})
+	}, []string{dataMigrationPackageLabelName, dataMigrationVersionLabelName})
 
 	// dataMigrationProgressTotal is the migrator-reported total units of work.
 	dataMigrationProgressTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "rockhopper_data_migration_progress_total",
 		Help: "Migrator-reported total units of work for a data migration.",
-	}, []string{dialect.PackageColumnName, dataMigrationVersionLabelName})
+	}, []string{dataMigrationPackageLabelName, dataMigrationVersionLabelName})
 
 	// dataMigrationETA is the framework-estimated time remaining, in
 	// milliseconds, computed from the rate observed in the current run.
 	dataMigrationETA = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "rockhopper_data_migration_eta_milliseconds",
 		Help: "Estimated time remaining for a data migration, in milliseconds.",
-	}, []string{dialect.PackageColumnName, dataMigrationVersionLabelName})
+	}, []string{dataMigrationPackageLabelName, dataMigrationVersionLabelName})
 )
 
 // dataMigrationDurationBuckets covers ~1ms to ~9 minutes with exponential

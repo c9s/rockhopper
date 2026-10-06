@@ -3,6 +3,8 @@ package dialect
 import (
 	"fmt"
 	"strings"
+
+	"github.com/c9s/rockhopper/v2/internal/column"
 )
 
 // ClickHouseDialect implements Dialect for ClickHouse.
@@ -125,7 +127,7 @@ func clickhouseOrderBy(s Schema) string {
 	}
 
 	var keys []string
-	for _, name := range []string{PackageColumnName, VersionIDColumnName} {
+	for _, name := range []string{column.Package, column.VersionID} {
 		if has(name) {
 			keys = append(keys, name)
 		}

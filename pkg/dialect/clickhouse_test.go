@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/c9s/rockhopper/v2/internal/column"
 )
 
 // TestCapability_LeaseBuilder pins which dialects advertise the data-migration
@@ -29,7 +31,7 @@ func TestCapability_LeaseBuilder(t *testing.T) {
 }
 
 func TestClickHouse_Insert(t *testing.T) {
-	sql, args := NewClickHouseDialect().Insert("t", []Col{{PackageColumnName, testDefaultPackage}, {VersionIDColumnName, int64(1)}})
+	sql, args := NewClickHouseDialect().Insert("t", []Col{{column.Package, testDefaultPackage}, {column.VersionID, int64(1)}})
 	assert.Equal(t, "INSERT INTO t (package, version_id) VALUES ($1, $2)", sql)
 	assert.Equal(t, []any{testDefaultPackage, int64(1)}, args)
 }
@@ -37,7 +39,7 @@ func TestClickHouse_Insert(t *testing.T) {
 // TestClickHouse_Delete asserts the mutation form: ClickHouse has no synchronous
 // row DELETE.
 func TestClickHouse_Delete(t *testing.T) {
-	sql, args := NewClickHouseDialect().Delete("t", []Col{{PackageColumnName, testDefaultPackage}, {VersionIDColumnName, int64(1)}})
+	sql, args := NewClickHouseDialect().Delete("t", []Col{{column.Package, testDefaultPackage}, {column.VersionID, int64(1)}})
 	assert.Equal(t,
 		"ALTER TABLE t DELETE WHERE package = $1 AND version_id = $2 SETTINGS mutations_sync = 2",
 		sql)
@@ -46,9 +48,9 @@ func TestClickHouse_Delete(t *testing.T) {
 
 func TestClickHouse_Select(t *testing.T) {
 	sql, args := NewClickHouseDialect().Select("t",
-		[]string{PackageColumnName, VersionIDColumnName, IsAppliedColumnName, TimestampColumnName},
-		[]Col{{PackageColumnName, testDefaultPackage}},
-		SelectOpt{OrderBy: []Order{{Col: RecordIDColumnName, Desc: true}}})
+		[]string{column.Package, column.VersionID, column.IsApplied, column.Timestamp},
+		[]Col{{column.Package, testDefaultPackage}},
+		SelectOpt{OrderBy: []Order{{Col: column.RecordID, Desc: true}}})
 	assert.Equal(t,
 		"SELECT package, version_id, is_applied, tstamp FROM t WHERE package = $1 ORDER BY id DESC",
 		sql)
@@ -59,12 +61,12 @@ func TestClickHouse_CreateTable(t *testing.T) {
 	s := Schema{
 		Table: "rockhopper_versions",
 		Columns: []Column{
-			{Name: RecordIDColumnName, Type: ColSerial, PrimaryKey: true},
-			{Name: PackageColumnName, Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"},
-			{Name: "source_file", Type: ColVarchar, Size: 255, NotNull: true, Default: "''"},
-			{Name: VersionIDColumnName, Type: ColBigInt, NotNull: true},
-			{Name: IsAppliedColumnName, Type: ColBool, NotNull: true},
-			{Name: TimestampColumnName, Type: ColTimestamp, NotNull: true, Default: DefaultNow},
+			{Name: column.RecordID, Type: ColSerial, PrimaryKey: true},
+			{Name: column.Package, Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"},
+			{Name: column.SourceFile, Type: ColVarchar, Size: 255, NotNull: true, Default: "''"},
+			{Name: column.VersionID, Type: ColBigInt, NotNull: true},
+			{Name: column.IsApplied, Type: ColBool, NotNull: true},
+			{Name: column.Timestamp, Type: ColTimestamp, NotNull: true, Default: DefaultNow},
 		},
 	}
 	out := NewClickHouseDialect().CreateTable(s)
@@ -86,7 +88,7 @@ func TestClickHouse_CreateTable(t *testing.T) {
 
 func TestClickHouse_AddColumn(t *testing.T) {
 	sql, ok := NewClickHouseDialect().AddColumn("goose_db_version",
-		Column{Name: PackageColumnName, Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"})
+		Column{Name: column.Package, Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"})
 	assert.True(t, ok)
 	assert.Equal(t, "ALTER TABLE goose_db_version ADD COLUMN package String DEFAULT 'main'", sql)
 }

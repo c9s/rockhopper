@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/c9s/rockhopper/v2/internal/column"
 	"github.com/c9s/rockhopper/v2/pkg/dialect"
 )
 
@@ -49,7 +50,7 @@ func TestPackageColumnWidthConsistent(t *testing.T) {
 
 			// The legacy-table upgrade ALTER must use the same width.
 			alter, supported := d.AddColumn("goose_db_version", dialect.Column{
-				Name: dialect.PackageColumnName, Type: dialect.ColVarchar, Size: packageColumnSize,
+				Name: column.Package, Type: dialect.ColVarchar, Size: packageColumnSize,
 				NotNull: true, Default: defaultPackageSQLLiteral,
 			})
 			if supported {

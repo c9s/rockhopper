@@ -47,9 +47,9 @@ func (sqliteDDL) sqlType(c Column) string {
 	case ColVarchar:
 		return fmt.Sprintf("VARCHAR(%d)", c.Size)
 	case ColText:
-		return sqlTextType
+		return "TEXT"
 	case ColTimestamp:
-		return sqlTimestampType
+		return "TIMESTAMP"
 	}
 	return ""
 }
