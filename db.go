@@ -29,17 +29,8 @@ const legacyGooseTableName = "goose_db_version"
 const TableName = "rockhopper_versions"
 
 const (
-	packageColumnName                     = "package"
-	versionIDColumnName                   = "version_id"
-	isAppliedColumnName                   = "is_applied"
-	recordIDColumnName                    = "id"
-	timestampColumnName                   = "tstamp"
-	dataMigrationStatusColumnName         = "status"
-	dataMigrationCheckpointColumnName     = "checkpoint"
-	dataMigrationLeaseOwnerColumnName     = "lease_owner"
-	dataMigrationLeaseExpiresAtColumnName = "lease_expires_at"
-	dataMigrationVersionLabelName         = "version"
-	defaultPackageSQLLiteral              = "'" + DefaultPackageName + "'"
+	dataMigrationVersionLabelName = "version"
+	defaultPackageSQLLiteral      = "'" + DefaultPackageName + "'"
 )
 
 // SQLExecutor executes SQL statements with a context and bind arguments.
@@ -163,8 +154,8 @@ func New(driverName string, dialect SQLDialect, db *sql.DB, tableName string) *D
 
 func (db *DB) deleteVersion(ctx context.Context, tx SQLExecutor, pkgName string, version int64) error {
 	q, args := db.dialect.Delete(db.tableName, []dialect.Col{
-		{Name: packageColumnName, Val: pkgName},
-		{Name: versionIDColumnName, Val: version},
+		{Name: dialect.PackageColumnName, Val: pkgName},
+		{Name: dialect.VersionIDColumnName, Val: version},
 	})
 	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to delete migration record")
@@ -199,10 +190,10 @@ func (db *DB) getTableNames(ctx context.Context) ([]string, error) {
 
 func (db *DB) insertVersion(ctx context.Context, tx SQLExecutor, pkgName, sourceFile string, version int64, applied bool) error {
 	q, args := db.dialect.Insert(db.tableName, []dialect.Col{
-		{Name: packageColumnName, Val: pkgName},
+		{Name: dialect.PackageColumnName, Val: pkgName},
 		{Name: "source_file", Val: sourceFile},
-		{Name: versionIDColumnName, Val: version},
-		{Name: isAppliedColumnName, Val: applied},
+		{Name: dialect.VersionIDColumnName, Val: version},
+		{Name: dialect.IsAppliedColumnName, Val: applied},
 	})
 	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to insert new migration record")
@@ -218,12 +209,12 @@ func (db *DB) LoadMigration(ctx context.Context, m *Migration) (*Migration, erro
 	var record MigrationRecord
 
 	q, args := db.dialect.Select(db.tableName,
-		[]string{recordIDColumnName, timestampColumnName, isAppliedColumnName},
+		[]string{dialect.RecordIDColumnName, dialect.TimestampColumnName, dialect.IsAppliedColumnName},
 		[]dialect.Col{
-			{Name: packageColumnName, Val: m.Package},
-			{Name: versionIDColumnName, Val: m.Version},
+			{Name: dialect.PackageColumnName, Val: m.Package},
+			{Name: dialect.VersionIDColumnName, Val: m.Version},
 		},
-		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: timestampColumnName, Desc: true}}, Limit: 1})
+		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: dialect.TimestampColumnName, Desc: true}}, Limit: 1})
 
 	row := db.QueryRowContext(ctx, q, args...)
 	if err := row.Err(); err != nil {
@@ -250,9 +241,9 @@ func (db *DB) LoadMigrationRecords() ([]MigrationRecord, error) {
 // LoadMigrationRecordsByPackage loads version records for a migration package.
 func (db *DB) LoadMigrationRecordsByPackage(ctx context.Context, pkgName string) ([]MigrationRecord, error) {
 	q, args := db.dialect.Select(db.tableName,
-		[]string{packageColumnName, versionIDColumnName, isAppliedColumnName, timestampColumnName},
-		[]dialect.Col{{Name: packageColumnName, Val: pkgName}},
-		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: recordIDColumnName, Desc: true}}})
+		[]string{dialect.PackageColumnName, dialect.VersionIDColumnName, dialect.IsAppliedColumnName, dialect.TimestampColumnName},
+		[]dialect.Col{{Name: dialect.PackageColumnName, Val: pkgName}},
+		dialect.SelectOpt{OrderBy: []dialect.Order{{Col: dialect.RecordIDColumnName, Desc: true}}})
 
 	//nolint:gosec // The dialect builds SQL from configured identifiers; runtime values are bind arguments.
 	rows, err := db.QueryContext(ctx, q, args...)
@@ -328,7 +319,7 @@ func (db *DB) upgradeCoreMigrations(_ context.Context, _ int64) error {
 func (db *DB) queryLatestVersion(ctx context.Context, pkgName string) (int64, error) {
 	q, args := db.dialect.Select(TableName,
 		[]string{"MAX(version_id)"},
-		[]dialect.Col{{Name: packageColumnName, Val: pkgName}},
+		[]dialect.Col{{Name: dialect.PackageColumnName, Val: pkgName}},
 		dialect.SelectOpt{})
 
 	row := db.QueryRowContext(ctx, q, args...)
@@ -363,7 +354,7 @@ func (db *DB) migrateLegacyGooseTable(ctx context.Context) error {
 	// Add the package column to the legacy table so its rows can be migrated.
 	// SQLite reports AddColumn as unsupported and is skipped here (as before).
 	if alterSQL, supported := db.dialect.AddColumn(legacyGooseTableName, dialect.Column{
-		Name:    packageColumnName,
+		Name:    dialect.PackageColumnName,
 		Type:    dialect.ColVarchar,
 		Size:    packageColumnSize,
 		NotNull: true,
@@ -437,12 +428,12 @@ func versionSchema(tableName string) dialect.Schema {
 	return dialect.Schema{
 		Table: tableName,
 		Columns: []dialect.Column{
-			{Name: recordIDColumnName, Type: dialect.ColSerial, PrimaryKey: true},
-			{Name: packageColumnName, Type: dialect.ColVarchar, Size: packageColumnSize, NotNull: true, Default: defaultPackageSQLLiteral},
+			{Name: dialect.RecordIDColumnName, Type: dialect.ColSerial, PrimaryKey: true},
+			{Name: dialect.PackageColumnName, Type: dialect.ColVarchar, Size: packageColumnSize, NotNull: true, Default: defaultPackageSQLLiteral},
 			{Name: "source_file", Type: dialect.ColVarchar, Size: 255, NotNull: true, Default: "''"},
-			{Name: versionIDColumnName, Type: dialect.ColBigInt, NotNull: true},
-			{Name: isAppliedColumnName, Type: dialect.ColBool, NotNull: true},
-			{Name: timestampColumnName, Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
+			{Name: dialect.VersionIDColumnName, Type: dialect.ColBigInt, NotNull: true},
+			{Name: dialect.IsAppliedColumnName, Type: dialect.ColBool, NotNull: true},
+			{Name: dialect.TimestampColumnName, Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
 		},
 	}
 }

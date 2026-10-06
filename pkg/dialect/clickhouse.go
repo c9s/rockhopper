@@ -125,7 +125,7 @@ func clickhouseOrderBy(s Schema) string {
 	}
 
 	var keys []string
-	for _, name := range []string{packageColumnName, versionIDColumnName} {
+	for _, name := range []string{PackageColumnName, VersionIDColumnName} {
 		if has(name) {
 			keys = append(keys, name)
 		}

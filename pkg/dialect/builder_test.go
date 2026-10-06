@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	testMySQLDialectName  = "mysql"
-	testSQLiteDialectName = "sqlite3"
-	testDefaultPackage    = "main"
-	testLeaseOwner        = "owner-a"
+	testMySQLDialectName    = "mysql"
+	testPostgresDialectName = "postgres"
+	testSQLiteDialectName   = "sqlite3"
+	testDefaultPackage      = "main"
+	testLeaseOwner          = "owner-a"
 )
 
 // leaseCapable is a dialect that exposes both the core CRUD shapes and the
@@ -29,8 +30,8 @@ type builderUnderTest struct {
 
 func builders() []builderUnderTest {
 	return []builderUnderTest{
-		{testMySQLDialectName, NewMySQLDialect()}, // "?" placeholders, NOW()
-		{"postgres", NewPostgresDialect()},        // "$N" placeholders, NOW()
+		{testMySQLDialectName, NewMySQLDialect()},       // "?" placeholders, NOW()
+		{testPostgresDialectName, NewPostgresDialect()}, // "$N" placeholders, NOW()
 	}
 }
 
@@ -51,7 +52,7 @@ func TestCRUD_Insert(t *testing.T) {
 func TestCRUD_Delete(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
-			sql, args := c.b.Delete("t", []Col{{packageColumnName, "p"}, {versionIDColumnName, int64(7)}})
+			sql, args := c.b.Delete("t", []Col{{PackageColumnName, "p"}, {VersionIDColumnName, int64(7)}})
 			if c.name == testMySQLDialectName {
 				assert.Equal(t, "DELETE FROM t WHERE package = ? AND version_id = ?", sql)
 			} else {
@@ -66,9 +67,9 @@ func TestCRUD_SelectOrderLimit(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.Select("t",
-				[]string{recordIDColumnName, timestampColumnName, isAppliedColumnName},
-				[]Col{{packageColumnName, "p"}},
-				SelectOpt{OrderBy: []Order{{Col: timestampColumnName, Desc: true}}, Limit: 1})
+				[]string{RecordIDColumnName, TimestampColumnName, IsAppliedColumnName},
+				[]Col{{PackageColumnName, "p"}},
+				SelectOpt{OrderBy: []Order{{Col: TimestampColumnName, Desc: true}}, Limit: 1})
 			if c.name == testMySQLDialectName {
 				assert.Equal(t, "SELECT id, tstamp, is_applied FROM t WHERE package = ? ORDER BY tstamp DESC LIMIT 1", sql)
 			} else {
@@ -94,7 +95,7 @@ func TestCRUD_AcquireLease(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.AcquireLease("t",
-				[]Col{{versionIDColumnName, int64(5)}},
+				[]Col{{VersionIDColumnName, int64(5)}},
 				testLeaseOwner, int64(200), int64(100))
 			if c.name == testMySQLDialectName {
 				assert.Equal(t,
@@ -116,8 +117,8 @@ func TestCRUD_CommitLease(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.CommitLease("t",
-				[]Col{{statusColumnName, "running"}, {checkpointColumnName, "cp"}},
-				[]Col{{versionIDColumnName, int64(5)}},
+				[]Col{{DataMigrationStatusColumnName, "running"}, {DataMigrationCheckpointColumnName, "cp"}},
+				[]Col{{VersionIDColumnName, int64(5)}},
 				testLeaseOwner)
 			if c.name == testMySQLDialectName {
 				assert.Equal(t,
@@ -139,7 +140,7 @@ func TestCRUD_ReleaseLease(t *testing.T) {
 	for _, c := range builders() {
 		t.Run(c.name, func(t *testing.T) {
 			sql, args := c.b.ReleaseLease("t", "completed",
-				[]Col{{versionIDColumnName, int64(5)}},
+				[]Col{{VersionIDColumnName, int64(5)}},
 				testLeaseOwner)
 			if c.name == testMySQLDialectName {
 				assert.Equal(t,

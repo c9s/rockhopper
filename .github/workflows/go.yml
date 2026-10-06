@@ -88,10 +88,8 @@ jobs:
         go test -race -coverprofile coverage.txt -covermode atomic ./...
         sed -i -e '/_requestgen.go/d' coverage.txt
 
-    - name: Revive Action
-      uses: morphy2k/revive-action@v2.7.8
-      with:
-        config: revive.toml
+    - name: Revive
+      run: go run github.com/mgechev/revive@v1.17.0 -config revive.toml ./...
 
     - name: Upload Coverage Report
       uses: codecov/codecov-action@v5

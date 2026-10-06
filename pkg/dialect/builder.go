@@ -190,8 +190,8 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 
 	var args []any
 	set := fmt.Sprintf("%s = %s, %s = %s, updated_at = %s",
-		leaseOwnerColumnName, next(),
-		leaseExpiresAtColumnName, next(),
+		DataMigrationLeaseOwnerColumnName, next(),
+		DataMigrationLeaseExpiresAtColumnName, next(),
 		c.t.NowExpr())
 	args = append(args, owner, expiresAt)
 
@@ -202,7 +202,8 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 	}
 
 	guard := fmt.Sprintf("(%s IS NULL OR %s = %s OR %s < %s)",
-		leaseOwnerColumnName, leaseOwnerColumnName, next(), leaseExpiresAtColumnName, next())
+		DataMigrationLeaseOwnerColumnName, DataMigrationLeaseOwnerColumnName, next(),
+		DataMigrationLeaseExpiresAtColumnName, next())
 	args = append(args, owner, now)
 
 	q := fmt.Sprintf("UPDATE %s SET %s WHERE %s AND %s",
@@ -214,19 +215,19 @@ func (c LeaseCRUD) AcquireLease(table string, keys []Col, owner string, expiresA
 func (c LeaseCRUD) CommitLease(table string, set, keys []Col, owner string) (string, []any) {
 	return c.Update(table, set, keys, UpdateOpt{
 		NowCols: []string{"updated_at"},
-		Lock:    &Col{Name: leaseOwnerColumnName, Val: owner},
+		Lock:    &Col{Name: DataMigrationLeaseOwnerColumnName, Val: owner},
 	})
 }
 
 // ReleaseLease builds an UPDATE that records a terminal status and clears a lease.
 func (c LeaseCRUD) ReleaseLease(table, status string, keys []Col, owner string) (string, []any) {
 	return c.Update(table,
-		[]Col{{Name: statusColumnName, Val: status}, {Name: leaseExpiresAtColumnName, Val: int64(0)}},
+		[]Col{{Name: DataMigrationStatusColumnName, Val: status}, {Name: DataMigrationLeaseExpiresAtColumnName, Val: int64(0)}},
 		keys,
 		UpdateOpt{
 			NowCols:  []string{"updated_at"},
-			NullCols: []string{leaseOwnerColumnName},
-			Lock:     &Col{Name: leaseOwnerColumnName, Val: owner},
+			NullCols: []string{DataMigrationLeaseOwnerColumnName},
+			Lock:     &Col{Name: DataMigrationLeaseOwnerColumnName, Val: owner},
 		})
 }
 
