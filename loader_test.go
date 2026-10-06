@@ -33,8 +33,8 @@ func TestFileNumericComponent(t *testing.T) {
 	}
 }
 
-func TestSqlMigrationLoader_Load(t *testing.T) {
-	loader := &SqlMigrationLoader{}
+func TestSQLMigrationLoader_Load(t *testing.T) {
+	loader := &SQLMigrationLoader{}
 	migrations, err := loader.Load("testdata/migrations")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, migrations)

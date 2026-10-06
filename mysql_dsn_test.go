@@ -29,7 +29,7 @@ func TestBuildMySqlDSN_UnixSocket(t *testing.T) {
 	t.Setenv("MYSQL_UNIX_PORT", "/opt/local/var/run/mysql8/mysqld.sock")
 	t.Setenv("MYSQL_DATABASE", "test")
 
-	dsn, err := buildMySqlDSN()
+	dsn, err := buildMySQLDSN()
 	if assert.NoError(t, err) {
 		assert.Equal(t, "root:123123@unix(/opt/local/var/run/mysql8/mysqld.sock)/test", dsn)
 	}
@@ -43,7 +43,7 @@ func TestBuildMySqlDSN_UnixSocketTakesPrecedenceOverHost(t *testing.T) {
 	t.Setenv("MYSQL_PORT", "3306")
 	t.Setenv("MYSQL_UNIX_PORT", "/tmp/mysql.sock")
 
-	dsn, err := buildMySqlDSN()
+	dsn, err := buildMySQLDSN()
 	if assert.NoError(t, err) {
 		assert.Equal(t, "root@unix(/tmp/mysql.sock)/", dsn)
 	}
@@ -57,7 +57,7 @@ func TestBuildMySqlDSN_TCPWhenNoSocket(t *testing.T) {
 	t.Setenv("MYSQL_PORT", "3306")
 	t.Setenv("MYSQL_DATABASE", "test")
 
-	dsn, err := buildMySqlDSN()
+	dsn, err := buildMySQLDSN()
 	if assert.NoError(t, err) {
 		assert.Equal(t, "root@tcp(127.0.0.1:3306)/test", dsn)
 	}
@@ -72,7 +72,7 @@ func TestBuildMySqlDSN_MySQL8PrefixUnixSocket(t *testing.T) {
 	t.Setenv("MYSQL8_UNIX_PORT", "/opt/local/var/run/mysql8/mysqld.sock")
 	t.Setenv("MYSQL8_DATABASE", "test")
 
-	dsn, err := buildMySqlDSN()
+	dsn, err := buildMySQLDSN()
 	if assert.NoError(t, err) {
 		assert.Equal(t, "root@unix(/opt/local/var/run/mysql8/mysqld.sock)/test", dsn)
 	}
@@ -83,7 +83,7 @@ func TestBuildMySqlDSN_URLPassthrough(t *testing.T) {
 
 	t.Setenv("MYSQL_URL", "root:123123@unix(/opt/local/var/run/mysql8/mysqld.sock)/test")
 
-	dsn, err := buildMySqlDSN()
+	dsn, err := buildMySQLDSN()
 	if assert.NoError(t, err) {
 		assert.Equal(t, "root:123123@unix(/opt/local/var/run/mysql8/mysqld.sock)/test", dsn)
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func TestLegacyGooseTableMigration_sqlite3(t *testing.T) {
-	driverName := "sqlite3"
+	driverName := DialectSQLite3
 	dialect, err := LoadDialect(driverName)
 	assert.NoError(t, err)
 
@@ -33,7 +33,7 @@ func TestLegacyGooseTableMigration_sqlite3(t *testing.T) {
 	tx, err := db.Begin()
 	assert.NoError(t, err)
 
-	err = db.insertVersion(ctx, tx, "main", "", 2000, true)
+	err = db.insertVersion(ctx, tx, DefaultPackageName, "", 2000, true)
 	assert.NoError(t, err)
 
 	err = tx.Commit()
@@ -41,7 +41,7 @@ func TestLegacyGooseTableMigration_sqlite3(t *testing.T) {
 }
 
 func TestMigration_UpAndDown(t *testing.T) {
-	driverName := "sqlite3"
+	driverName := DialectSQLite3
 	dialect, err := LoadDialect(driverName)
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestMigration_UpAndDown(t *testing.T) {
 // or a lone semicolon) are skipped at execution time instead of failing with
 // errors like MySQL 1065 "Query was empty".
 func TestMigration_SkipsEmptyStatements(t *testing.T) {
-	driverName := "sqlite3"
+	driverName := DialectSQLite3
 	dialect, err := LoadDialect(driverName)
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestMigration_SkipsEmptyStatements(t *testing.T) {
 // TestMigration_ErrorIncludesLocation guards that a failing statement surfaces
 // the migration's source filename and version in the error message.
 func TestMigration_ErrorIncludesLocation(t *testing.T) {
-	driverName := "sqlite3"
+	driverName := DialectSQLite3
 	dialect, err := LoadDialect(driverName)
 	if err != nil {
 		t.Fatal(err)

@@ -11,11 +11,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const VersionIdTimestampFormat = "20060102150405"
+// VersionIDTimestampFormat is the timestamp format used for migration versions.
+const VersionIDTimestampFormat = "20060102150405"
+
+// VersionIdTimestampFormat is the legacy spelling of VersionIDTimestampFormat.
+//
+// Deprecated: use VersionIDTimestampFormat.
+//
+//revive:disable-next-line var-naming // Preserve the original exported name for compatibility.
+const VersionIdTimestampFormat = VersionIDTimestampFormat
 
 // CreateWithTemplate writes a migration file with a give template
 func CreateWithTemplate(dir string, tmpl *template.Template, name, migrationType string) error {
-	version := time.Now().Format(VersionIdTimestampFormat)
+	version := time.Now().Format(VersionIDTimestampFormat)
 	filename := fmt.Sprintf("%s_%s.%s", version, snakeCase(name), migrationType)
 
 	if tmpl == nil {

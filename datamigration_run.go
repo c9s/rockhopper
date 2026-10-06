@@ -27,18 +27,18 @@ func dataMigrationSchema(tableName string) dialect.Schema {
 	return dialect.Schema{
 		Table: tableName,
 		Columns: []dialect.Column{
-			{Name: "id", Type: dialect.ColSerial, PrimaryKey: true},
-			{Name: "package", Type: dialect.ColVarchar, Size: packageColumnSize, NotNull: true, Default: "'main'"},
-			{Name: "version_id", Type: dialect.ColBigInt, NotNull: true},
+			{Name: recordIDColumnName, Type: dialect.ColSerial, PrimaryKey: true},
+			{Name: packageColumnName, Type: dialect.ColVarchar, Size: packageColumnSize, NotNull: true, Default: defaultPackageSQLLiteral},
+			{Name: versionIDColumnName, Type: dialect.ColBigInt, NotNull: true},
 			{Name: "name", Type: dialect.ColVarchar, Size: 255, NotNull: true, Default: "''"},
-			{Name: "status", Type: dialect.ColVarchar, Size: 32, NotNull: true, Default: "'pending'"},
-			{Name: "checkpoint", Type: dialect.ColText},
-			{Name: "lease_owner", Type: dialect.ColVarchar, Size: 255},
-			{Name: "lease_expires_at", Type: dialect.ColBigInt, NotNull: true, Default: "0"},
+			{Name: dataMigrationStatusColumnName, Type: dialect.ColVarchar, Size: 32, NotNull: true, Default: "'pending'"},
+			{Name: dataMigrationCheckpointColumnName, Type: dialect.ColText},
+			{Name: dataMigrationLeaseOwnerColumnName, Type: dialect.ColVarchar, Size: 255},
+			{Name: dataMigrationLeaseExpiresAtColumnName, Type: dialect.ColBigInt, NotNull: true, Default: "0"},
 			{Name: "created_at", Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
 			{Name: "updated_at", Type: dialect.ColTimestamp, NotNull: true, Default: dialect.DefaultNow},
 		},
-		Unique: [][]string{{"package", "version_id"}},
+		Unique: [][]string{{packageColumnName, versionIDColumnName}},
 	}
 }
 
@@ -58,10 +58,10 @@ func (db *DB) leaseBuilder() (dialect.LeaseBuilder, error) {
 // migration. found is false when no row exists yet.
 func (db *DB) loadDataMigrationState(ctx context.Context, pkgName string, version int64) (status string, cp Checkpoint, found bool, err error) {
 	q, args := db.dialect.Select(DataMigrationTableName,
-		[]string{"status", "checkpoint"},
+		[]string{dataMigrationStatusColumnName, dataMigrationCheckpointColumnName},
 		[]dialect.Col{
-			{Name: "package", Val: pkgName},
-			{Name: "version_id", Val: version},
+			{Name: packageColumnName, Val: pkgName},
+			{Name: versionIDColumnName, Val: version},
 		},
 		dialect.SelectOpt{})
 	row := db.QueryRowContext(ctx, q, args...)
@@ -85,11 +85,11 @@ func (db *DB) loadDataMigrationState(ctx context.Context, pkgName string, versio
 // insertDataMigrationState inserts the initial state row for a data migration.
 func (db *DB) insertDataMigrationState(ctx context.Context, exec SQLExecutor, dm *DataMigration, status string, cp Checkpoint) error {
 	q, args := db.dialect.Insert(DataMigrationTableName, []dialect.Col{
-		{Name: "package", Val: dm.Package},
-		{Name: "version_id", Val: dm.Version},
+		{Name: packageColumnName, Val: dm.Package},
+		{Name: versionIDColumnName, Val: dm.Version},
 		{Name: "name", Val: dm.Name},
-		{Name: "status", Val: status},
-		{Name: "checkpoint", Val: string(cp)},
+		{Name: dataMigrationStatusColumnName, Val: status},
+		{Name: dataMigrationCheckpointColumnName, Val: string(cp)},
 	})
 	if _, err := exec.ExecContext(ctx, q, args...); err != nil {
 		return errors.Wrap(err, "failed to insert data migration state")
@@ -112,8 +112,8 @@ func (db *DB) acquireDataMigrationLease(ctx context.Context, dm *DataMigration, 
 
 	q, args := lb.AcquireLease(DataMigrationTableName,
 		[]dialect.Col{
-			{Name: "package", Val: dm.Package},
-			{Name: "version_id", Val: dm.Version},
+			{Name: packageColumnName, Val: dm.Package},
+			{Name: versionIDColumnName, Val: dm.Version},
 		},
 		owner, expiresAt, now.Unix())
 
@@ -191,8 +191,8 @@ func (db *DB) releaseDataMigrationLease(ctx context.Context, dm *DataMigration, 
 
 	q, args := lb.ReleaseLease(DataMigrationTableName, status,
 		[]dialect.Col{
-			{Name: "package", Val: dm.Package},
-			{Name: "version_id", Val: dm.Version},
+			{Name: packageColumnName, Val: dm.Package},
+			{Name: versionIDColumnName, Val: dm.Version},
 		},
 		owner)
 
@@ -217,13 +217,13 @@ func (db *DB) persistPlanCheckpoint(ctx context.Context, dm *DataMigration, owne
 	expiresAt := time.Now().Add(ttl).Unix()
 	q, args := lb.CommitLease(DataMigrationTableName,
 		[]dialect.Col{
-			{Name: "status", Val: DataMigrationRunning},
-			{Name: "checkpoint", Val: string(cp)},
-			{Name: "lease_expires_at", Val: expiresAt},
+			{Name: dataMigrationStatusColumnName, Val: DataMigrationRunning},
+			{Name: dataMigrationCheckpointColumnName, Val: string(cp)},
+			{Name: dataMigrationLeaseExpiresAtColumnName, Val: expiresAt},
 		},
 		[]dialect.Col{
-			{Name: "package", Val: dm.Package},
-			{Name: "version_id", Val: dm.Version},
+			{Name: packageColumnName, Val: dm.Package},
+			{Name: versionIDColumnName, Val: dm.Version},
 		},
 		owner)
 
@@ -352,7 +352,7 @@ func RunDataMigration(ctx context.Context, db *DB, dm *DataMigration) error {
 		return ErrLeaseHeld
 	}
 
-	logger.WithFields(log.Fields{"lease_owner": owner, "lease_ttl": ttl}).Debug("data migration lease acquired")
+	logger.WithFields(log.Fields{dataMigrationLeaseOwnerColumnName: owner, "lease_ttl": ttl}).Debug("data migration lease acquired")
 
 	// we hold the lease; reload the authoritative status and checkpoint (a
 	// stolen lease resumes from the previous owner's last committed batch).
@@ -526,13 +526,13 @@ func (db *DB) runDataBatch(ctx context.Context, dm *DataMigration, owner string,
 
 	q, args := lb.CommitLease(DataMigrationTableName,
 		[]dialect.Col{
-			{Name: "status", Val: status},
-			{Name: "checkpoint", Val: string(next)},
-			{Name: "lease_expires_at", Val: expiresAt},
+			{Name: dataMigrationStatusColumnName, Val: status},
+			{Name: dataMigrationCheckpointColumnName, Val: string(next)},
+			{Name: dataMigrationLeaseExpiresAtColumnName, Val: expiresAt},
 		},
 		[]dialect.Col{
-			{Name: "package", Val: dm.Package},
-			{Name: "version_id", Val: dm.Version},
+			{Name: packageColumnName, Val: dm.Package},
+			{Name: versionIDColumnName, Val: dm.Version},
 		},
 		owner)
 

@@ -38,7 +38,7 @@ func checkConfig(config *rockhopper.Config) error {
 	return nil
 }
 
-func status(cmd *cobra.Command, args []string) error {
+func status(_ *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -57,7 +57,7 @@ func status(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	loader := rockhopper.NewSqlMigrationLoader(config)
+	loader := rockhopper.NewSQLMigrationLoader(config)
 
 	allMigrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {
@@ -91,9 +91,9 @@ func status(cmd *cobra.Command, args []string) error {
 	}
 	sort.Slice(pkgNames, func(i, j int) bool {
 		// make the "main" package always comes first
-		if pkgNames[i] == "main" {
+		if pkgNames[i] == rockhopper.DefaultPackageName {
 			return true
-		} else if pkgNames[j] == "main" {
+		} else if pkgNames[j] == rockhopper.DefaultPackageName {
 			return false
 		}
 		return pkgNames[i] < pkgNames[j]

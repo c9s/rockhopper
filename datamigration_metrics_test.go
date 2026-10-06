@@ -32,7 +32,7 @@ func TestDataMigrationMetrics_Recorded(t *testing.T) {
 	seedUsers(t, db, 25)
 
 	const version = int64(1700000000000030)
-	mig := &progressMigrator{backfillMigrator{table: "users", batchSize: 10}}
+	mig := &progressMigrator{backfillMigrator{table: testUsersTableName, batchSize: 10}}
 	dm := &DataMigration{Package: DefaultPackageName, Version: version, Migrator: mig}
 
 	require.NoError(t, RunDataMigration(ctx, db, dm))
@@ -57,8 +57,8 @@ func TestDataMigrationMetrics_Recorded(t *testing.T) {
 	// Plan ran once and every Batch was timed: 1 plan + 3 batch observations.
 	// Filter by this migration's version because the collectors are process-wide
 	// globals shared with every other data-migration test.
-	assert.Equal(t, 1, countHistogram(t, reg, "rockhopper_data_migration_plan_duration_milliseconds", vl))
-	assert.Equal(t, 3, countHistogram(t, reg, "rockhopper_data_migration_batch_duration_milliseconds", vl))
+	assert.Equal(t, uint64(1), countHistogram(t, reg, "rockhopper_data_migration_plan_duration_milliseconds", vl))
+	assert.Equal(t, uint64(3), countHistogram(t, reg, "rockhopper_data_migration_batch_duration_milliseconds", vl))
 }
 
 func TestDurationMillis(t *testing.T) {
@@ -68,13 +68,13 @@ func TestDurationMillis(t *testing.T) {
 
 // countHistogram returns the sample count of the named histogram for the series
 // whose "version" label equals versionLabel.
-func countHistogram(t *testing.T, reg *prometheus.Registry, name, versionLabel string) int {
+func countHistogram(t *testing.T, reg *prometheus.Registry, name, versionLabel string) uint64 {
 	t.Helper()
 
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
 
-	total := 0
+	var total uint64
 	for _, mf := range mfs {
 		if mf.GetName() != name {
 			continue
@@ -87,8 +87,8 @@ func countHistogram(t *testing.T, reg *prometheus.Registry, name, versionLabel s
 			}
 
 			for _, lp := range m.GetLabel() {
-				if lp.GetName() == "version" && lp.GetValue() == versionLabel {
-					total += int(h.GetSampleCount())
+				if lp.GetName() == dataMigrationVersionLabelName && lp.GetValue() == versionLabel {
+					total += h.GetSampleCount()
 				}
 			}
 		}

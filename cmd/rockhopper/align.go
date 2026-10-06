@@ -1,3 +1,4 @@
+// Package main provides the rockhopper command-line application.
 package main
 
 import (
@@ -24,7 +25,7 @@ var AlignCmd = &cobra.Command{
 	RunE:         align,
 }
 
-func align(cmd *cobra.Command, args []string) error {
+func align(_ *cobra.Command, args []string) error {
 	packageName := args[0]
 	versionStr := args[1]
 	versionID, err := strconv.ParseInt(versionStr, 10, 64)
@@ -46,7 +47,7 @@ func align(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	loader := rockhopper.NewSqlMigrationLoader(config)
+	loader := rockhopper.NewSQLMigrationLoader(config)
 
 	migrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {

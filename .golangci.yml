@@ -1,6 +1,5 @@
 version: "2"
 run:
-  issues-exit-code: 0
   tests: true
 linters:
   default: none

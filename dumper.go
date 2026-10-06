@@ -36,7 +36,7 @@ func TestGetMigrationsMap(t *testing.T) {
 	assert.NotEmpty(t, mm)
 }
 
-func TestMergeMigrationsMap(t *testing.T) {
+func TestMergeMigrationsMap(_ *testing.T) {
 	MergeMigrationsMap(map[rockhopper.RegistryKey]*rockhopper.Migration{
 		{Version: 2}: {},
 		{Version: 3}: {},
@@ -48,7 +48,8 @@ func TestMergeMigrationsMap(t *testing.T) {
 var apiTemplate = template.Must(
 	template.New("cmd.go-migration-api").
 		Funcs(templateFuncs).
-		Parse(`package {{.PackageName}}
+		Parse(`// Package {{.PackageName}} contains compiled migration registry helpers.
+package {{.PackageName}}
 
 import (
 	"runtime"
@@ -61,6 +62,7 @@ import (
 
 var registeredGoMigrations = map[rockhopper.RegistryKey]*rockhopper.Migration{}
 
+// MergeMigrationsMap adds migrations without replacing existing registry entries.
 func MergeMigrationsMap(ms map[rockhopper.RegistryKey]*rockhopper.Migration) {
 	for k, m := range ms {
 		if _, ok := registeredGoMigrations[k] ; !ok {
@@ -71,6 +73,7 @@ func MergeMigrationsMap(ms map[rockhopper.RegistryKey]*rockhopper.Migration) {
 	}
 }
 
+// GetMigrationsMap returns the generated migration registry.
 func GetMigrationsMap() map[rockhopper.RegistryKey]*rockhopper.Migration {
 	return registeredGoMigrations
 }
@@ -236,6 +239,7 @@ func renderMigration(packageName string, m *Migration) ([]byte, error) {
 	return format.Source(buf.Bytes())
 }
 
+// GoMigrationDumper writes generated Go source for a set of migrations.
 type GoMigrationDumper struct {
 	Dir         string
 	PackageName string
@@ -243,7 +247,8 @@ type GoMigrationDumper struct {
 	Wipe bool
 }
 
-func (d *GoMigrationDumper) DumpApi() error {
+// DumpAPI generates the migration registry source and its test file.
+func (d *GoMigrationDumper) DumpAPI() error {
 	packageName := d.PackageName
 	if len(packageName) == 0 {
 		packageName = filepath.Base(d.Dir)
@@ -268,6 +273,16 @@ func (d *GoMigrationDumper) DumpApi() error {
 	return nil
 }
 
+// DumpApi is the legacy spelling of DumpAPI.
+//
+// Deprecated: use DumpAPI.
+//
+//revive:disable-next-line var-naming // Preserve the original exported method for compatibility.
+func (d *GoMigrationDumper) DumpApi() error {
+	return d.DumpAPI()
+}
+
+// Dump writes the registry and source files for migrations.
 func (d *GoMigrationDumper) Dump(migrations MigrationSlice) error {
 	if d.Wipe {
 		if err := os.RemoveAll(d.Dir); err != nil {
@@ -279,7 +294,7 @@ func (d *GoMigrationDumper) Dump(migrations MigrationSlice) error {
 		}
 	}
 
-	if err := d.DumpApi(); err != nil {
+	if err := d.DumpAPI(); err != nil {
 		return err
 	}
 
@@ -293,6 +308,7 @@ func (d *GoMigrationDumper) Dump(migrations MigrationSlice) error {
 	return nil
 }
 
+// DumpMigration writes the generated Go source for a single migration.
 func (d *GoMigrationDumper) DumpMigration(m *Migration) error {
 	packageName := d.PackageName
 	if len(packageName) == 0 {

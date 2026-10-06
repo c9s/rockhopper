@@ -27,7 +27,7 @@ var UpCmd = &cobra.Command{
 	RunE:         up,
 }
 
-func up(cmd *cobra.Command, args []string) error {
+func up(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -61,7 +61,7 @@ func up(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	loader := rockhopper.NewSqlMigrationLoader(config)
+	loader := rockhopper.NewSQLMigrationLoader(config)
 
 	allMigrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {

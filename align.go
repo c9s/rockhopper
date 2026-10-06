@@ -1,3 +1,4 @@
+// Package rockhopper provides database migration tools for Go applications.
 package rockhopper
 
 import (
@@ -6,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Align moves the database to versionID by applying or rolling back migrations.
 func Align(ctx context.Context, db *DB, versionID int64, migrations MigrationSlice) error {
 	_, lastAppliedMigration, err := db.FindLastAppliedMigration(ctx, migrations)
 	if err != nil {

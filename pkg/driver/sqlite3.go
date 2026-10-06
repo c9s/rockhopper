@@ -3,5 +3,5 @@
 package driver
 
 import (
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // register the SQLite database/sql driver
 )

@@ -13,9 +13,9 @@ func TestCapability_LeaseBuilder(t *testing.T) {
 		name string
 		d    Dialect
 	}{
-		{"mysql", NewMySQLDialect()},
+		{testMySQLDialectName, NewMySQLDialect()},
 		{"postgres", NewPostgresDialect()},
-		{"sqlite3", NewSqlite3Dialect()},
+		{testSQLiteDialectName, NewSqlite3Dialect()},
 		{"tidb", NewTiDBDialect()},
 		{"redshift", NewRedshiftDialect()},
 	}
@@ -29,42 +29,42 @@ func TestCapability_LeaseBuilder(t *testing.T) {
 }
 
 func TestClickHouse_Insert(t *testing.T) {
-	sql, args := NewClickHouseDialect().Insert("t", []Col{{"package", "main"}, {"version_id", int64(1)}})
+	sql, args := NewClickHouseDialect().Insert("t", []Col{{packageColumnName, testDefaultPackage}, {versionIDColumnName, int64(1)}})
 	assert.Equal(t, "INSERT INTO t (package, version_id) VALUES ($1, $2)", sql)
-	assert.Equal(t, []any{"main", int64(1)}, args)
+	assert.Equal(t, []any{testDefaultPackage, int64(1)}, args)
 }
 
 // TestClickHouse_Delete asserts the mutation form: ClickHouse has no synchronous
 // row DELETE.
 func TestClickHouse_Delete(t *testing.T) {
-	sql, args := NewClickHouseDialect().Delete("t", []Col{{"package", "main"}, {"version_id", int64(1)}})
+	sql, args := NewClickHouseDialect().Delete("t", []Col{{packageColumnName, testDefaultPackage}, {versionIDColumnName, int64(1)}})
 	assert.Equal(t,
 		"ALTER TABLE t DELETE WHERE package = $1 AND version_id = $2 SETTINGS mutations_sync = 2",
 		sql)
-	assert.Equal(t, []any{"main", int64(1)}, args)
+	assert.Equal(t, []any{testDefaultPackage, int64(1)}, args)
 }
 
 func TestClickHouse_Select(t *testing.T) {
 	sql, args := NewClickHouseDialect().Select("t",
-		[]string{"package", "version_id", "is_applied", "tstamp"},
-		[]Col{{"package", "main"}},
-		SelectOpt{OrderBy: []Order{{Col: "id", Desc: true}}})
+		[]string{packageColumnName, versionIDColumnName, isAppliedColumnName, timestampColumnName},
+		[]Col{{packageColumnName, testDefaultPackage}},
+		SelectOpt{OrderBy: []Order{{Col: recordIDColumnName, Desc: true}}})
 	assert.Equal(t,
 		"SELECT package, version_id, is_applied, tstamp FROM t WHERE package = $1 ORDER BY id DESC",
 		sql)
-	assert.Equal(t, []any{"main"}, args)
+	assert.Equal(t, []any{testDefaultPackage}, args)
 }
 
 func TestClickHouse_CreateTable(t *testing.T) {
 	s := Schema{
 		Table: "rockhopper_versions",
 		Columns: []Column{
-			{Name: "id", Type: ColSerial, PrimaryKey: true},
-			{Name: "package", Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"},
+			{Name: recordIDColumnName, Type: ColSerial, PrimaryKey: true},
+			{Name: packageColumnName, Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"},
 			{Name: "source_file", Type: ColVarchar, Size: 255, NotNull: true, Default: "''"},
-			{Name: "version_id", Type: ColBigInt, NotNull: true},
-			{Name: "is_applied", Type: ColBool, NotNull: true},
-			{Name: "tstamp", Type: ColTimestamp, NotNull: true, Default: DefaultNow},
+			{Name: versionIDColumnName, Type: ColBigInt, NotNull: true},
+			{Name: isAppliedColumnName, Type: ColBool, NotNull: true},
+			{Name: timestampColumnName, Type: ColTimestamp, NotNull: true, Default: DefaultNow},
 		},
 	}
 	out := NewClickHouseDialect().CreateTable(s)
@@ -86,7 +86,7 @@ func TestClickHouse_CreateTable(t *testing.T) {
 
 func TestClickHouse_AddColumn(t *testing.T) {
 	sql, ok := NewClickHouseDialect().AddColumn("goose_db_version",
-		Column{Name: "package", Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"})
+		Column{Name: packageColumnName, Type: ColVarchar, Size: 128, NotNull: true, Default: "'main'"})
 	assert.True(t, ok)
 	assert.Equal(t, "ALTER TABLE goose_db_version ADD COLUMN package String DEFAULT 'main'", sql)
 }

@@ -49,8 +49,8 @@ func TestPackageColumnWidthConsistent(t *testing.T) {
 
 			// The legacy-table upgrade ALTER must use the same width.
 			alter, supported := d.AddColumn("goose_db_version", dialect.Column{
-				Name: "package", Type: dialect.ColVarchar, Size: packageColumnSize,
-				NotNull: true, Default: "'main'",
+				Name: packageColumnName, Type: dialect.ColVarchar, Size: packageColumnSize,
+				NotNull: true, Default: defaultPackageSQLLiteral,
 			})
 			if supported {
 				assert.True(t, strings.Contains(alter, fmt.Sprintf("VARCHAR(%d)", packageColumnSize)),

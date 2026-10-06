@@ -11,7 +11,7 @@ import (
 
 func newTestMigration(version int64, createSQL, dropSQL string) *Migration {
 	return &Migration{
-		Package:        "main",
+		Package:        DefaultPackageName,
 		Version:        version,
 		Source:         "migrations/main/test.sql",
 		UseTx:          true,
@@ -23,10 +23,10 @@ func newTestMigration(version int64, createSQL, dropSQL string) *Migration {
 func openTestDB(t *testing.T) *DB {
 	t.Helper()
 
-	dialect, err := LoadDialect("sqlite3")
+	dialect, err := LoadDialect(DialectSQLite3)
 	require.NoError(t, err)
 
-	db, err := Open("sqlite3", dialect, ":memory:", TableName)
+	db, err := Open(DialectSQLite3, dialect, ":memory:", TableName)
 	require.NoError(t, err)
 
 	t.Cleanup(func() { _ = db.Close() })
@@ -62,7 +62,7 @@ func TestInspectMigrations_DetectsOutOfOrder(t *testing.T) {
 
 	// The typed error should carry the offending migration and be actionable.
 	ooErr := &OutOfOrderError{
-		Package:               "main",
+		Package:               DefaultPackageName,
 		HighestAppliedVersion: status.HighestAppliedVersion,
 		Migrations:            status.OutOfOrder,
 	}

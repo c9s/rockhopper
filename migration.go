@@ -12,7 +12,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// DefaultPackageName is the package assigned to migrations without an explicit package.
 const DefaultPackageName = "main"
+
+// CorePackageName is the package that owns Rockhopper's internal migrations.
 const CorePackageName = "rockhopper"
 
 // Migration presents the migration script object as a linked-list node.
@@ -228,8 +231,10 @@ func executeStatements(ctx context.Context, e SQLExecutor, stmts []Statement) er
 	return nil
 }
 
+// MigrationSlice is an ordered collection of migrations.
 type MigrationSlice []*Migration
 
+// Head returns the first migration, or nil when the slice is empty.
 func (ms MigrationSlice) Head() *Migration {
 	if len(ms) == 0 {
 		return nil
@@ -238,6 +243,7 @@ func (ms MigrationSlice) Head() *Migration {
 	return ms[0]
 }
 
+// Tail returns the last migration, or nil when the slice is empty.
 func (ms MigrationSlice) Tail() *Migration {
 	if len(ms) == 0 {
 		return nil
@@ -246,6 +252,7 @@ func (ms MigrationSlice) Tail() *Migration {
 	return ms[len(ms)-1]
 }
 
+// FilterPackage returns migrations whose package is in pkgs.
 func (ms MigrationSlice) FilterPackage(pkgs []string) (slice MigrationSlice) {
 	for _, s := range ms {
 		if sliceContains(pkgs, s.Package) {
@@ -256,6 +263,7 @@ func (ms MigrationSlice) FilterPackage(pkgs []string) (slice MigrationSlice) {
 	return slice
 }
 
+// MapByPackage groups migrations by package name.
 func (ms MigrationSlice) MapByPackage() MigrationMap {
 	mm := make(MigrationMap)
 
@@ -284,6 +292,7 @@ func (ms MigrationSlice) Less(i, j int) bool {
 	return ms[i].Version < ms[j].Version
 }
 
+// Versions returns the version numbers in slice order.
 func (ms MigrationSlice) Versions() (versions []int64) {
 	for _, migration := range ms {
 		versions = append(versions, migration.Version)
@@ -302,11 +311,13 @@ func (ms MigrationSlice) Find(version int64) (*Migration, error) {
 	return nil, fmt.Errorf("migration source version %d not found, available versions: %v", version, ms.Versions())
 }
 
+// Sort orders migrations by ascending version.
 func (ms MigrationSlice) Sort() MigrationSlice {
 	sort.Sort(ms)
 	return ms
 }
 
+// Connect links adjacent migrations through their Next and Previous fields.
 func (ms MigrationSlice) Connect() MigrationSlice {
 	// now that we're sorted in the appropriate direction,
 	// populate next and previous for each migration
@@ -331,6 +342,7 @@ func (ms MigrationSlice) Connect() MigrationSlice {
 	return ms
 }
 
+// SortAndConnect sorts migrations by version and links adjacent migrations.
 func (ms MigrationSlice) SortAndConnect() MigrationSlice {
 	return ms.Sort().Connect()
 }

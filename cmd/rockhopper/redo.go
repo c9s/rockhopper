@@ -23,7 +23,7 @@ var RedoCmd = &cobra.Command{
 	RunE:         redo,
 }
 
-func redo(cmd *cobra.Command, args []string) error {
+func redo(_ *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -38,7 +38,7 @@ func redo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	loader := rockhopper.NewSqlMigrationLoader(config)
+	loader := rockhopper.NewSQLMigrationLoader(config)
 
 	migrations, err := loader.Load(config.MigrationsDirs...)
 	if err != nil {
