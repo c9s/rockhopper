@@ -44,7 +44,7 @@ func TestRenderMigrationKeepsStatements(t *testing.T) {
 }
 
 func TestMigrationDumper(t *testing.T) {
-	var loader SqlMigrationLoader
+	var loader SQLMigrationLoader
 	var migrations, err = loader.Load("testdata/migrations")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, migrations)

@@ -8,8 +8,8 @@
 // every driver is excluded from the build.
 package driver
 
-// NormalizeMySQLDSN, when set, rewrites a MySQL DSN so that parseTime=true is
-// enabled. rockhopper scans the version table's tstamp column into time.Time,
+// NormalizeMySQLDSN rewrites a MySQL DSN so that parseTime=true is enabled when
+// the MySQL driver is included. rockhopper scans the version table's tstamp column into time.Time,
 // which requires parseTime=true; without it the driver returns the raw []byte
 // and scanning fails. It is registered by mysql.go's init and stays nil when
 // the MySQL driver is excluded from the build (the no_mysql build tag).

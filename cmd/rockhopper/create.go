@@ -8,6 +8,8 @@ import (
 	"github.com/c9s/rockhopper/v2"
 )
 
+const createCommandName = "create"
+
 func init() {
 	CreateCmd.Flags().StringP("type", "t", "sql", "migration type, could be \"go\" or \"sql\"")
 	CreateCmd.Flags().StringP("output", "o", "", "output directory")
@@ -15,9 +17,9 @@ func init() {
 }
 
 var CreateCmd = &cobra.Command{
-	Use:   "create",
-	Short: "create",
-	Long:  "create",
+	Use:   createCommandName,
+	Short: createCommandName,
+	Long:  createCommandName,
 	Args:  cobra.MinimumNArgs(1),
 
 	// SilenceUsage is an option to silence usage when an error occurs.

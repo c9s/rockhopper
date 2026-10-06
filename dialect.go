@@ -6,6 +6,7 @@ import (
 	"github.com/c9s/rockhopper/v2/pkg/dialect"
 )
 
+// DialectPostgres and the other Dialect constants name supported SQL dialects.
 const (
 	DialectPostgres   = "postgres"
 	DialectMySQL      = "mysql"
@@ -19,6 +20,7 @@ const (
 // implementations and the CRUD query builder live in pkg/dialect.
 type SQLDialect = dialect.Dialect
 
+// LoadDialect returns the SQL dialect implementation for d.
 func LoadDialect(d string) (SQLDialect, error) {
 	switch d {
 	case DialectPostgres:

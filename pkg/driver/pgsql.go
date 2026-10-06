@@ -3,5 +3,5 @@
 package driver
 
 import (
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // register the PostgreSQL database/sql driver
 )

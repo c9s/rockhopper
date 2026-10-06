@@ -15,12 +15,19 @@ func NewMySQLDialect() *MySQLDialect {
 	return d
 }
 
+// Placeholder returns MySQL's question-mark bind marker.
 func (d *MySQLDialect) Placeholder(int) string { return "?" }
-func (d *MySQLDialect) NowExpr() string        { return "NOW()" }
-func (d *MySQLDialect) TableNames() string     { return "SHOW TABLES" }
 
+// NowExpr returns MySQL's current-time expression for DML.
+func (d *MySQLDialect) NowExpr() string { return sqlNowExpression }
+
+// TableNames returns the query used to list tables in the current database.
+func (d *MySQLDialect) TableNames() string { return "SHOW TABLES" }
+
+// CreateTable renders a MySQL CREATE TABLE statement for s.
 func (d *MySQLDialect) CreateTable(s Schema) string { return buildCreateTable(mysqlDDL{}, s) }
 
+// AddColumn renders a MySQL ALTER TABLE statement for c.
 func (d *MySQLDialect) AddColumn(table string, c Column) (string, bool) {
 	return buildAddColumn(mysqlDDL{}, table, c), true
 }
@@ -39,13 +46,13 @@ func (mysqlDDL) sqlType(c Column) string {
 	case ColVarchar:
 		return fmt.Sprintf("VARCHAR(%d)", c.Size)
 	case ColText:
-		return "TEXT"
+		return sqlTextType
 	case ColTimestamp:
-		return "TIMESTAMP"
+		return sqlTimestampType
 	}
 	return ""
 }
 
-func (mysqlDDL) nowDefault() string { return "NOW()" }
+func (mysqlDDL) nowDefault() string { return sqlNowExpression }
 func (mysqlDDL) ifNotExists() bool  { return true }
 func (mysqlDDL) inlinePK() bool     { return false }

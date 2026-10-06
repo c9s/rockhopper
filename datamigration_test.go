@@ -13,6 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testUsersTableName = "users"
+	testOrdersName     = "orders"
+)
+
 // pkCursor is the JSON-serialized checkpoint used by the test backfill: it
 // advances an exclusive lower bound over an auto-increment primary key.
 type pkCursor struct {
@@ -72,10 +77,10 @@ func (b *backfillMigrator) Batch(ctx context.Context, exec BatchExecutor, cp Che
 func openDataMigrationTestDB(t *testing.T) *DB {
 	t.Helper()
 
-	d, err := LoadDialect("sqlite3")
+	d, err := LoadDialect(DialectSQLite3)
 	require.NoError(t, err)
 
-	db, err := Open("sqlite3", d, ":memory:", TableName)
+	db, err := Open(DialectSQLite3, d, ":memory:", TableName)
 	require.NoError(t, err)
 
 	// :memory: gives a fresh database per connection; pin the pool to one
@@ -105,9 +110,9 @@ func countMigrated(t *testing.T, db *DB) int {
 	return c
 }
 
-func mustCursor(t *testing.T, last, max int64) string {
+func mustCursor(t *testing.T, last, maxID int64) string {
 	t.Helper()
-	b, err := json.Marshal(pkCursor{Last: last, Max: max})
+	b, err := json.Marshal(pkCursor{Last: last, Max: maxID})
 	require.NoError(t, err)
 	return string(b)
 }
@@ -137,7 +142,7 @@ func TestRunDataMigration_Backfill(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 25)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000001, Name: "backfill_users", Migrator: mig}
 
 	require.NoError(t, RunDataMigration(ctx, db, dm))
@@ -193,7 +198,7 @@ func TestRunDataMigration_SkipsWhenCompleted(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 5)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000002, Migrator: mig}
 
 	require.NoError(t, RunDataMigration(ctx, db, dm))
@@ -210,7 +215,7 @@ func TestRunDataMigration_ResumesAfterFailure(t *testing.T) {
 	seedUsers(t, db, 25)
 
 	// fail after the second committed batch (20 rows migrated, checkpoint at 20).
-	mig := &backfillMigrator{table: "users", batchSize: 10, failAfterBatch: 2}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10, failAfterBatch: 2}
 	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000003, Migrator: mig}
 
 	err := RunDataMigration(ctx, db, dm)
@@ -240,7 +245,7 @@ func TestRunDataMigration_ReleasesLeaseOnComplete(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 5)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000020, Migrator: mig}
 
 	require.NoError(t, RunDataMigration(ctx, db, dm))
@@ -256,7 +261,7 @@ func TestRunDataMigration_LeaseHeldByAnother(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 25)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	// LeaseWait < 0 disables waiting so a held lease is reported immediately.
 	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000021, Migrator: mig, LeaseWait: -1}
 
@@ -281,7 +286,7 @@ func TestRunDataMigration_StealsExpiredLease(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 25)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000022, Migrator: mig}
 
 	// a dead process left an expired lease with a running status and checkpoint.
@@ -324,7 +329,7 @@ func TestRunDataMigration_WaitsForStaleLeaseToExpire(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 25)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{
 		Package:   DefaultPackageName,
 		Version:   1700000000000030,
@@ -356,7 +361,7 @@ func TestRunDataMigration_WaitTimesOutWhileLeaseHeld(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 25)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{
 		Package:   DefaultPackageName,
 		Version:   1700000000000031,
@@ -385,7 +390,7 @@ func TestRunDataMigration_WaitDisabledSkipsImmediately(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 25)
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{
 		Package:   DefaultPackageName,
 		Version:   1700000000000032,
@@ -448,7 +453,7 @@ func TestRunDataMigration_LeaseLostMidBatch(t *testing.T) {
 	db := openDataMigrationTestDB(t)
 	seedUsers(t, db, 25)
 
-	mig := &leaseStealingMigrator{table: "users", batchSize: 10}
+	mig := &leaseStealingMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{Package: DefaultPackageName, Version: 1700000000000023, Migrator: mig}
 
 	err := RunDataMigration(ctx, db, dm)
@@ -459,7 +464,7 @@ func TestRunDataMigration_LeaseLostMidBatch(t *testing.T) {
 }
 
 func TestAddNamedDataMigration(t *testing.T) {
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	AddNamedDataMigration("backfillpkg", "1700000000000010_backfill_users.go", mig,
 		After(1699999999999999),
 		WithThrottle(0),
@@ -481,7 +486,7 @@ func TestRunDataMigration_DependencyGate(t *testing.T) {
 	require.NoError(t, db.Touch(ctx))
 
 	const schemaVersion = int64(1699999999999999)
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{
 		Package:  DefaultPackageName,
 		Version:  1700000000000004,
@@ -513,12 +518,12 @@ type flakyMigrator struct {
 	batchCalls int
 }
 
-func (m *flakyMigrator) Plan(ctx context.Context, q Queryer) (Checkpoint, error) {
+func (m *flakyMigrator) Plan(_ context.Context, _ Queryer) (Checkpoint, error) {
 	m.planCalls++
 	return Checkpoint(`{"started":true}`), nil
 }
 
-func (m *flakyMigrator) Batch(ctx context.Context, exec BatchExecutor, cp Checkpoint) (Checkpoint, bool, error) {
+func (m *flakyMigrator) Batch(_ context.Context, _ BatchExecutor, cp Checkpoint) (Checkpoint, bool, error) {
 	m.batchCalls++
 	if m.batchCalls <= m.failFirst {
 		return nil, false, fmt.Errorf("transient failure on batch %d", m.batchCalls)
@@ -615,7 +620,7 @@ func TestRunDataMigration_ReplansOnEmptyCheckpoint(t *testing.T) {
 	seedUsers(t, db, 5)
 	require.NoError(t, db.Touch(ctx))
 
-	mig := &backfillMigrator{table: "users", batchSize: 10}
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10}
 	dm := &DataMigration{
 		Package:  DefaultPackageName,
 		Version:  1700000000000010,
@@ -632,16 +637,16 @@ func TestRunDataMigration_ReplansOnEmptyCheckpoint(t *testing.T) {
 
 func TestAfterOption_TargetPackage(t *testing.T) {
 	t.Run("defaults to the data migration's own package", func(t *testing.T) {
-		dm := &DataMigration{Package: "orders"}
+		dm := &DataMigration{Package: testOrdersName}
 		After(1700000000000000)(dm)
 
 		assert.Equal(t, int64(1700000000000000), dm.After)
 		assert.Empty(t, dm.AfterPackage, "no explicit package configured")
-		assert.Equal(t, "orders", dm.afterPackage(), "falls back to the data migration package")
+		assert.Equal(t, testOrdersName, dm.afterPackage(), "falls back to the data migration package")
 	})
 
 	t.Run("explicit package targets a different package", func(t *testing.T) {
-		dm := &DataMigration{Package: "orders"}
+		dm := &DataMigration{Package: testOrdersName}
 		After(1700000000000000, "core")(dm)
 
 		assert.Equal(t, "core", dm.AfterPackage)
@@ -651,9 +656,9 @@ func TestAfterOption_TargetPackage(t *testing.T) {
 
 func TestWithDataMigrationName_SetsPackage(t *testing.T) {
 	dm := &DataMigration{Package: "derived"}
-	WithDataMigrationName("backfill users", "main")(dm)
+	WithDataMigrationName("backfill users", DefaultPackageName)(dm)
 	assert.Equal(t, "backfill users", dm.Name)
-	assert.Equal(t, "main", dm.Package, "package argument overrides the existing package")
+	assert.Equal(t, DefaultPackageName, dm.Package, "package argument overrides the existing package")
 
 	keep := &DataMigration{Package: "keepme"}
 	WithDataMigrationName("name only")(keep)
@@ -672,9 +677,9 @@ func TestRunDataMigration_DependencyGateDefaultPackage(t *testing.T) {
 
 	const schemaVersion = int64(1699999999999998)
 	dm := &DataMigration{
-		Package:  "orders",
+		Package:  testOrdersName,
 		Version:  1700000000000005,
-		Migrator: &backfillMigrator{table: "users", batchSize: 10},
+		Migrator: &backfillMigrator{table: testUsersTableName, batchSize: 10},
 		After:    schemaVersion,
 	}
 
@@ -691,7 +696,7 @@ func TestRunDataMigration_DependencyGateDefaultPackage(t *testing.T) {
 	// applying it under "orders" satisfies the gate.
 	tx, err = db.Begin()
 	require.NoError(t, err)
-	require.NoError(t, db.insertVersion(ctx, tx, "orders", "", schemaVersion, true))
+	require.NoError(t, db.insertVersion(ctx, tx, testOrdersName, "", schemaVersion, true))
 	require.NoError(t, tx.Commit())
 
 	require.NoError(t, RunDataMigration(ctx, db, dm))
@@ -711,7 +716,7 @@ func TestRunDataMigration_DependencyGateCrossPackage(t *testing.T) {
 	dm := &DataMigration{
 		Package:      DefaultPackageName,
 		Version:      1700000000000006,
-		Migrator:     &backfillMigrator{table: "users", batchSize: 10},
+		Migrator:     &backfillMigrator{table: testUsersTableName, batchSize: 10},
 		After:        schemaVersion,
 		AfterPackage: "core",
 	}
@@ -783,7 +788,7 @@ func TestRunDataMigration_ReportsProgress(t *testing.T) {
 	seedUsers(t, db, 25)
 
 	var reports []ProgressReport
-	mig := &progressMigrator{backfillMigrator{table: "users", batchSize: 10}}
+	mig := &progressMigrator{backfillMigrator{table: testUsersTableName, batchSize: 10}}
 	dm := &DataMigration{
 		Package:  DefaultPackageName,
 		Version:  1700000000000020,
@@ -815,7 +820,7 @@ func TestRunDataMigration_NoProgressReporter(t *testing.T) {
 	seedUsers(t, db, 15)
 
 	called := 0
-	mig := &backfillMigrator{table: "users", batchSize: 10} // no Progress method
+	mig := &backfillMigrator{table: testUsersTableName, batchSize: 10} // no Progress method
 	dm := &DataMigration{
 		Package:  DefaultPackageName,
 		Version:  1700000000000021,

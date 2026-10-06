@@ -25,7 +25,7 @@ func TestClickHouse_DataMigrationUnsupported(t *testing.T) {
 	_, err := db.leaseBuilder()
 	assert.ErrorIs(t, err, ErrDataMigrationUnsupported)
 
-	dm := &DataMigration{Package: "main", Version: 1, Name: "x", Migrator: noopMigrator{}}
+	dm := &DataMigration{Package: DefaultPackageName, Version: 1, Name: "x", Migrator: noopMigrator{}}
 	err = RunDataMigration(context.Background(), db, dm)
 	assert.ErrorIs(t, err, ErrDataMigrationUnsupported,
 		"RunDataMigration must refuse to run on a dialect without the lease capability")

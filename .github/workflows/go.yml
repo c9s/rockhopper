@@ -94,8 +94,7 @@ jobs:
     - name: Revive Check
       uses: morphy2k/revive-action@v2.7.7 # https://github.com/mgechev/revive/issues/956
       with:
-        reporter: github-pr-review
-        fail_on_error: true
+        config: revive.toml
 
     - name: Upload Coverage Report
       uses: codecov/codecov-action@v5
@@ -106,4 +105,3 @@ jobs:
       run: |
         echo "DB_DRIVER=mysql" >> .env.local
         echo "DB_DSN=root:root@/bbgo" >> .env.local
-

@@ -23,11 +23,11 @@ var rootCmd = &cobra.Command{
 	// SilenceUsage is an option to silence usage when an error occurs.
 	SilenceUsage: true,
 
-	PreRunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return nil
 	},
 
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		debug, _ := cmd.Flags().GetBool("debug")
 		if debug || viper.GetBool("debug") {
 			logrus.SetLevel(logrus.DebugLevel)
@@ -48,7 +48,7 @@ var rootCmd = &cobra.Command{
 		return nil
 	},
 
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		return nil
 	},
 }

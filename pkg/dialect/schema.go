@@ -5,6 +5,21 @@ import (
 	"strings"
 )
 
+const (
+	packageColumnName        = "package"
+	versionIDColumnName      = "version_id"
+	isAppliedColumnName      = "is_applied"
+	recordIDColumnName       = "id"
+	timestampColumnName      = "tstamp"
+	statusColumnName         = "status"
+	checkpointColumnName     = "checkpoint"
+	leaseOwnerColumnName     = "lease_owner"
+	leaseExpiresAtColumnName = "lease_expires_at"
+	sqlTextType              = "TEXT"
+	sqlTimestampType         = "TIMESTAMP"
+	sqlNowExpression         = "NOW()"
+)
+
 // ColumnType is an abstract column type. Each dialect maps it to its own DDL
 // spelling (see the ddlRenderer implementations in the per-dialect files).
 type ColumnType int
@@ -14,10 +29,15 @@ const (
 	// carries the full definition (NOT NULL, identity/auto-increment, and, for
 	// SQLite, the inline PRIMARY KEY).
 	ColSerial ColumnType = iota
+	// ColBigInt represents a signed large integer.
 	ColBigInt
+	// ColBool represents a boolean value.
 	ColBool
+	// ColVarchar represents a length-limited string.
 	ColVarchar
+	// ColText represents an unbounded string.
 	ColText
+	// ColTimestamp represents a timestamp value.
 	ColTimestamp
 )
 

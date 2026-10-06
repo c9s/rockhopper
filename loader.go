@@ -18,9 +18,18 @@ var (
 	// ErrNoCurrentVersion when a current migration version is not found.
 	ErrNoCurrentVersion = errors.New("no current version found")
 
+	// ErrVersionNotFound is returned when a migration version does not exist.
 	ErrVersionNotFound = errors.New("migration version not found")
 
-	SqlMigrationFilenamePattern = regexp.MustCompile(`(\d+)_(\w+)\.sql$`)
+	// SQLMigrationFilenamePattern extracts the description from a SQL migration filename.
+	SQLMigrationFilenamePattern = regexp.MustCompile(`(\d+)_(\w+)\.sql$`)
+
+	// SqlMigrationFilenamePattern is the legacy spelling of SQLMigrationFilenamePattern.
+	//
+	// Deprecated: use SQLMigrationFilenamePattern.
+	//
+	//revive:disable-next-line var-naming // Preserve the original exported name for compatibility.
+	SqlMigrationFilenamePattern = SQLMigrationFilenamePattern
 )
 
 func replaceExt(s string, ext string) string {
@@ -36,6 +45,7 @@ type MigrationRecord struct {
 	Package   string    `db:"package"`
 }
 
+// TransactionHandler runs one direction of a Go migration in a transaction.
 type TransactionHandler func(ctx context.Context, exec SQLExecutor) error
 
 var migrationVersionRegExp = regexp.MustCompile(`_?(\d{14,})_`)
@@ -50,10 +60,10 @@ func parseVersionID(name string) (string, error) {
 }
 
 // FileNumericComponent looks for migration scripts with names in the form:
-// {VersionIdTimestampFormat}_descriptivename.ext where XXX specifies the version number
+// {VersionIDTimestampFormat}_descriptivename.ext where XXX specifies the version number
 // and ext specifies the type of migration
 //
-// See VersionIdTimestampFormat
+// See VersionIDTimestampFormat.
 func FileNumericComponent(name string) (int64, error) {
 	base := filepath.Base(name)
 
@@ -78,10 +88,13 @@ func FileNumericComponent(name string) (int64, error) {
 	return n, nil
 }
 
+// MigrationLoader is a compatibility interface for migration loader types.
 type MigrationLoader interface{}
 
+// GoMigrationLoader loads migrations registered by Go code.
 type GoMigrationLoader struct{}
 
+// Load returns all registered Go migrations in ascending version order.
 func (loader *GoMigrationLoader) Load() (MigrationSlice, error) {
 	var migrations = MigrationSlice{}
 	for _, migration := range registeredGoMigrations {
@@ -91,6 +104,7 @@ func (loader *GoMigrationLoader) Load() (MigrationSlice, error) {
 	return migrations.Sort(), nil
 }
 
+// LoadByPackageSuffix returns registered migrations whose package ends with suffix.
 func (loader *GoMigrationLoader) LoadByPackageSuffix(suffix string) (MigrationSlice, error) {
 	var migrations = MigrationSlice{}
 	for _, migration := range registeredGoMigrations {
@@ -102,6 +116,7 @@ func (loader *GoMigrationLoader) LoadByPackageSuffix(suffix string) (MigrationSl
 	return migrations.SortAndConnect(), nil
 }
 
+// LoadByExactPackage returns registered migrations in packageName.
 func (loader *GoMigrationLoader) LoadByExactPackage(packageName string) (MigrationSlice, error) {
 	var migrations = MigrationSlice{}
 	for _, migration := range registeredGoMigrations {
@@ -113,8 +128,10 @@ func (loader *GoMigrationLoader) LoadByExactPackage(packageName string) (Migrati
 	return migrations.SortAndConnect(), nil
 }
 
+// MigrationMap groups migrations by package name.
 type MigrationMap map[string]MigrationSlice
 
+// FilterPackage returns only the package entries named in pkgNames.
 func (m MigrationMap) FilterPackage(pkgNames []string) MigrationMap {
 	newM := make(MigrationMap)
 	for k, v := range m {
@@ -126,6 +143,7 @@ func (m MigrationMap) FilterPackage(pkgNames []string) MigrationMap {
 	return newM
 }
 
+// SortAndConnect sorts and links each package's migrations.
 func (m MigrationMap) SortAndConnect() MigrationMap {
 	newM := make(MigrationMap)
 	for k, v := range m {
@@ -135,32 +153,51 @@ func (m MigrationMap) SortAndConnect() MigrationMap {
 	return newM
 }
 
-type SqlMigrationLoader struct {
+// SQLMigrationLoader loads SQL migration files from configured directories.
+type SQLMigrationLoader struct {
 	defaultPackage string
 
 	config *Config
 }
 
-func NewSqlMigrationLoader(config *Config) *SqlMigrationLoader {
+// NewSQLMigrationLoader creates a loader for SQL migration files.
+func NewSQLMigrationLoader(config *Config) *SQLMigrationLoader {
 	defaultPkgName := config.Package
 	if defaultPkgName == "" {
 		defaultPkgName = DefaultPackageName
 	}
 
-	return &SqlMigrationLoader{
+	return &SQLMigrationLoader{
 		defaultPackage: defaultPkgName,
 		config:         config,
 	}
 }
 
-func (loader *SqlMigrationLoader) SetDefaultPackage(pkgName string) {
+// SqlMigrationLoader is the legacy spelling of SQLMigrationLoader.
+//
+// Deprecated: use SQLMigrationLoader.
+//
+//revive:disable-next-line var-naming // Preserve the original exported name for compatibility.
+type SqlMigrationLoader = SQLMigrationLoader
+
+// NewSqlMigrationLoader creates a loader for SQL migration files.
+//
+// Deprecated: use NewSQLMigrationLoader.
+//
+//revive:disable-next-line var-naming // Preserve the original exported name for compatibility.
+func NewSqlMigrationLoader(config *Config) *SqlMigrationLoader {
+	return NewSQLMigrationLoader(config)
+}
+
+// SetDefaultPackage sets the package assigned to migrations without a package annotation.
+func (loader *SQLMigrationLoader) SetDefaultPackage(pkgName string) {
 	loader.defaultPackage = pkgName
 }
 
 // Load returns all the valid looking migration scripts in the
 // migrations folders and go func registry, and key them by version.
 // Load method always returns a sorted migration slice
-func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
+func (loader *SQLMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
 	log.Debugf("starting loading sql migrations from %v", dirs)
 
 	var all MigrationSlice
@@ -180,7 +217,7 @@ func (loader *SqlMigrationLoader) Load(dirs ...string) (MigrationSlice, error) {
 
 // LoadDir returns all the valid looking migration scripts in the
 // migrations folder and go func registry, and key them by version.
-func (loader *SqlMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
+func (loader *SQLMigrationLoader) LoadDir(dir string) (MigrationSlice, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("directory %q does not exists", dir)
 	}
