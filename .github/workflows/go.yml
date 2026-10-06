@@ -65,7 +65,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.27'
+        go-version-file: go.mod
 
     - name: Test Migration SQL Files For MySQL
       run: |
@@ -88,8 +88,10 @@ jobs:
         go test -race -coverprofile coverage.txt -covermode atomic ./...
         sed -i -e '/_requestgen.go/d' coverage.txt
 
-    - name: Revive Check
-      run: go run github.com/mgechev/revive@v1.17.0 -config revive.toml ./...
+    - name: Revive Action
+      uses: morphy2k/revive-action@v2.7.8
+      with:
+        config: revive.toml
 
     - name: Upload Coverage Report
       uses: codecov/codecov-action@v5
