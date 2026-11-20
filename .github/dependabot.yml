@@ -1,0 +1,52 @@
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # GitHub Actions — keep workflow actions current, one grouped PR per week.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Asia/Taipei"
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "dep"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # ---------------------------------------------------------------------------
+  # Go modules — version-update PRs are disabled (open-pull-requests-limit: 0);
+  # Dependabot still opens security updates, which are grouped into one PR.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Asia/Taipei"
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "dep"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "go"
+    open-pull-requests-limit: 0
+    groups:
+      gomod-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
