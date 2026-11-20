@@ -92,7 +92,7 @@ jobs:
       run: go run github.com/mgechev/revive@v1.17.0 -config revive.toml ./...
 
     - name: Upload Coverage Report
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v7
       with:
         files: ./coverage.txt,./coverage_dnum.txt
 
